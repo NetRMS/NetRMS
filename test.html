@@ -31,19 +31,7 @@ canvas {
 
 <script>
 
-function toHex(n) {
-	var s = n.toString(16);
-	
-	return s.length == 1? "0"+s: s;
-}
 
-function numToRGBString(n) {
-	return "#"+ toHex((n >> 16) & 255) + toHex((n >> 8) & 255) + toHex(n & 255);
-}
-
-function rgbToRGBString(rgb) {
-	return "#"+ toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
-}
 
 function Rect(x, y, w, h) {
 	this.x = x;
@@ -66,46 +54,45 @@ Node.FILL = "rgba(255, 69, 0, 1)";
 Node.STROKE = "rgba(0, 0, 230, 0.5)";
 Node.LINE = 1;
 Node.prototype = {
-	initialize: function (context, rect, stroke, fill, line) {
+	initialize: function (context, _context, rect, stroke, fill, line) {
 		this.context = context;
+		this._context = _context;
 		this.rect = rect || new Rect(0, 0, Node.WIDTH, Node.HEIGHT);
 		this.stroke = stroke || Node.STROKE;
 		this.fill = fill || Node.FILL;
 		this.line = line || Node.LINE;
+		this.index;
 	},
 	path: function (context) {
-		context = context || this.context;
-		
 		context.beginPath();
 		context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
 		context.closePath();
 	},
-	draw: function (context) {
-		context = context || this.context;
+	draw: function () {
+		this.path(this.context);
 		
-		this.path(context);
+		this.context.save();
+		this.context.strokeStyle = this.stroke;
+		this.context.fillStyle = this.fill;
+		this.context.lineWidth = this.line;
+		this.context.stroke();
+		this.context.fill();
 		
-		context.save();
-		context.strokeStyle = this.stroke;
-		context.fillStyle = this.fill;
-		context.lineWidth = this.line;
-		context.stroke();
-		context.fill();
-		
-		context.restore();
+		this.context.restore();
 	},
-	shadow: function (context, fill) {
-		this.path(context);
+	shadow: function (index) {
+		this.path(this._context);
 		
-		context.save();
-		context.fillStyle = fill;
-		context.fill();
-		context.restore();
+		this._context.save();
+		this._context.fillStyle = this.index = index || this.index;
+		this._context.fill();
+		this._context.restore();
 	},
-	isPointInPath: function(pos) {
-		this.path();
+	move: function(pos) {
+		this.rect.x = pos.x;
+		this.rect.y = pos.y;
 		
-		return this.context.isPointInPath(pos.x, pos.y);
+		this.draw();
 	}
 };
 
@@ -118,14 +105,14 @@ Index.prototype = {
 		this.index = 0;
 	},
 	add: function (node) {
-		var index = numToRGBString(++this.index);
+		var index = Map.toRGBString(++this.index);
 		
 		this.map[index] = node;
 		
 		return index;
 	},
 	get: function (rgb) {
-		return this.map[rgbToRGBString(rgb)];
+		return this.map[Map.toRGBString(Map.toRGBNumber(rgb))];
 	}
 };
 
@@ -135,6 +122,17 @@ function Map(id, w, h) {
 Map.WIDTH = 300;
 Map.HEIGHT = 300;
 Map.STROKE = "rgba(0,0,230,0.4)";
+Map.toRGBString = function (n) {
+	return "#"+ Map.toHex((n >> 16) & 255) + Map.toHex((n >> 8) & 255) + Map.toHex(n & 255);
+};
+Map.toHex = function (n) {
+	var s = n.toString(16);
+	
+	return s.length == 1? "0"+s: s;
+};
+Map.toRGBNumber = function (rgb) {
+	return rgb[0]<<16 | rgb[1]<<8 | rgb[2];
+};
 Map.prototype = {
 	initialize: function (id, w, h) {
 		this.map = document.getElementById(id);
@@ -145,12 +143,14 @@ Map.prototype = {
 		this.nodes = [];
 		this.copy = null;
 		this.index = new Index();
-		this.draggable = {};
 		this.mouse = new Pos();
 		this.selectable = null;
+		this.selected = null;
+		this.offset = new Pos();
+		this.handler = {};
 		
 		this.map.appendChild(this.canvas);
-		this.map.appendChild(this._canvas);
+		//this.map.appendChild(this._canvas);
 		this._canvas.width = this.canvas.width = w || Map.WIDTH;
 		this._canvas.height = this.canvas.height = h || Map.HEIGHT;
 		
@@ -159,48 +159,47 @@ Map.prototype = {
 			event.preventDefault();
 			
 			var pos = _this.getPos(event);
-			if(pos.x == _this.mouse.x && pos.y == _this.mouse.y) {
+			if(pos.x == _this.mouse.x && pos.y == _this.mouse.y) { // 움직임 없는 이벤트 방지
 				return;
 			}
 			
 			_this.mouse = pos;
 			
-			var data = _this._context.getImageData(_this.mouse.x, _this.mouse.y, 1, 1).data, node;
-			
-			if((node = _this.index.get(data)) && node == _this.selectable) {
+			if(_this.selected) { // drag
+				_this.drag();
+				
 				return;
 			}
 			
+			var data = _this._context.getImageData(_this.mouse.x, _this.mouse.y, 1, 1).data, node;
+			if(node = _this.index.get(data)) { // 노드 감지
+				if(node != _this.selectable) { // enter 이벤트 발생
+					_this.dispatchEvent("enter", node);
+				}
+				else {
+					return; // 노드 변화가 없는 이벤트 방지
+				}
+			}
+			else if(_this.selectable){
+				_this.dispatchEvent("leave", _this.selectable);
+			}
+			
 			_this.selectable = node;
-			
-			if(node) {
-				console.log(node);
-			}
-			
-			if(_this.draggable.node && _this.copy) {
-				_this.drag(_this.mouse);
-			}
 		};
 		
 		this.map.onmousedown = function (event) {
 			event.preventDefault();
 			
-			_this.dragTest(_this.getPos(event));
-		};
-		
-		this.map.onmouseup = function (event) {
-			event.preventDefault();
-			
-			if(_this.draggable.node && _this.copy) {
-				_this.dragEnd();
+			if(_this.selectable) {
+				_this.onSelect();
 			}
 		};
 		
-		this.map.onmouseout = function (event) {
+		this.map.onmouseup = this.map.onmouseout = function (event) {
 			event.preventDefault();
 			
-			if(_this.draggable.node && _this.copy) {
-				_this.dragEnd();
+			if(_this.selected) {
+				_this.onCancel();
 			}
 		};
 	},
@@ -216,69 +215,59 @@ Map.prototype = {
 		this.context.stroke();
 		this.context.restore();
 	},
-	dragTest: function(pos) {
-		//var data = this._context.getImageData(pos.x, pos.y, 1, 1).data,
-		//node = this.index.get(data);
+	onSelect: function() {
+		this.dispatchEvent("select", this.selected = this.selectable);
 		
-		//if(node) {
-		if(this.selectable) {
-			this.nodes.splice(this.nodes.indexOf(this.selectable), 1);
-			this.nodes.push(this.draggable.node = this.selectable);
-			
-			this.dragStart(pos);
-		}
-	},
-	dragStart: function() {
+		this.offset = new Pos(this.mouse.x - this.selected.rect.x, this.mouse.y - this.selected.rect.y);
+		this.nodes.splice(this.nodes.indexOf(this.selected), 1);
 		this.copy = this.invalidate();
-		this.setOffset(this.mouse);
-		this.drag(this.mouse);
+		this.selected.draw();
 	},
-	dragEnd: function() {
-		this.invalidate();
-		this.draggable.node.draw();
-		this.draggable.node = null;
-		//this.context.putImageData(this.copy, 0, 0);
-	},
-	drag: function(pos) {
-		var pos = this.rePos(pos);
+	onCancel: function() {
+		this.dispatchEvent("cancel", this.selected);
 		
+		this.nodes.push(this.selected);
+		this.invalidate();
+		this.selected = null;
+	},
+	drag: function() {
 		this.context.putImageData(this.copy, 0, 0);
-		this.draggable.node.rect.x = pos.x;
-		this.draggable.node.rect.y = pos.y;
-		this.draggable.node.draw();
+		
+		var pos = new Pos(this.mouse.x - this.offset.x, this.mouse.y - this.offset.y);
+		this.selected.move(pos);
 		this.drawGuide(pos);
 	},
 	addNode: function() {
-		var node = new Node(this.context, new Rect(Math.floor(Math.random() * this.canvas.width), Math.floor(Math.random() * this.canvas.height), 50, 50));
-		//console.log(Math.random() * this.canvas.width);
-		//var node = new Node(this.context);
+		var node = new Node(this.context, this._context, new Rect(Math.floor(Math.random() * this.canvas.width), Math.floor(Math.random() * this.canvas.height), 50, 50));
 		
 		this.nodes.push(node);
 		
-		var index = this.index.add(node);
-		
-		node.draw(this.context);
-		node.shadow(this._context, index);
+		node.draw();
+		node.shadow(this.index.add(node));
 	},
 	invalidate: function() {
 		this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		this._context.clearRect(0, 0, this._canvas.width, this._canvas.height);
 		
-		for(var i=0, nodes=this.nodes, j=nodes.length-1; i<j; i++) { // 그리기는 순서대로, 선택은 반대로, 마지막이 선택된 것이므로 그리기 생략
+		for(var i=0, nodes=this.nodes, j=nodes.length; i<j; i++) {
 			nodes[i].draw();
+			nodes[i].shadow();
 		}
 		
 		return this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
-	},
-	setOffset: function(pos) {
-		this.draggable.offset = new Pos(pos.x - this.draggable.node.rect.x, pos.y - this.draggable.node.rect.y);
-	},
-	rePos: function(pos) {
-		return new Pos(pos.x - this.draggable.offset.x, pos.y - this.draggable.offset.y);
 	},
 	getPos: function(event) {
 		var rect = this.canvas.getBoundingClientRect();
 		
 		return new Pos(event.clientX - rect.left - this.canvas.clientLeft, event.clientY - rect.top - this.canvas.clientTop);
+	},
+	on: function (event, handler) {
+		this.handler[event] = handler;
+	},
+	dispatchEvent: function (event, node) {
+		if(this.handler[event]) {
+			this.handler[event](node);
+		}
 	}
 }
 
@@ -286,6 +275,16 @@ var map = new Map("canvas");
 
 map.addNode();
 map.addNode();
+
+map.on("enter", function(node) {
+	console.log("enter"+ node);
+});
+map.on("leave", function(node) {
+	console.log("leave"+ node);
+});
+map.on("select", function(node) {
+	console.log("select"+ node);
+});
 </script>
 
   </body>
