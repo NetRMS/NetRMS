@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Dragging Polygons</title>
+ <meta charset="UTF-8">
+    <style>
+
+#canvas {
+ border: 10px solid gold;
+ position: relative;
+ margin: 10px;
+ padding: 10px;
+}
+canvas {
+ background-color: silver;
+ float: left;
+}
+
+#canvas>div {
+ width: 10px;
+ height: 10px;
+ position: absolute;
+ border: 1px solid green;
+ top: 0;
+}
+    </style>
+  </head>
+
+   <body>
+<div id="canvas"></div>
+
+<script>
+
+function toHex(n) {
+	var s = n.toString(16);
+	
+	return s.length == 1? "0"+s: s;
+}
+
+function numToRGBString(n) {
+	return "#"+ toHex((n >> 16) & 255) + toHex((n >> 8) & 255) + toHex(n & 255);
+}
+
+function rgbToRGBString(rgb) {
+	return "#"+ toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
+}
+
+function Rect(x, y, w, h) {
+	this.x = x;
+	this.y = y;
+	this.w = w;
+	this.h = h;
+}
+
+function Pos(x, y) {
+	this.x = x || 0;
+	this.y = y || 0;
+}
+
+function Node(context, rect, stroke, fill, line) {
+	this.initialize(context, rect, stroke, fill, line);
+}
+Node.WIDTH = 50;
+Node.HEIGHT = 50;
+Node.FILL = "rgba(255, 69, 0, 1)";
+Node.STROKE = "rgba(0, 0, 230, 0.5)";
+Node.LINE = 1;
+Node.prototype = {
+	initialize: function (context, rect, stroke, fill, line) {
+		this.context = context;
+		this.rect = rect || new Rect(0, 0, Node.WIDTH, Node.HEIGHT);
+		this.stroke = stroke || Node.STROKE;
+		this.fill = fill || Node.FILL;
+		this.line = line || Node.LINE;
+	},
+	path: function (context) {
+		context = context || this.context;
+		
+		context.beginPath();
+		context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
+		context.closePath();
+	},
+	draw: function (context) {
+		context = context || this.context;
+		
+		this.path(context);
+		
+		context.save();
+		context.strokeStyle = this.stroke;
+		context.fillStyle = this.fill;
+		context.lineWidth = this.line;
+		context.stroke();
+		context.fill();
+		
+		context.restore();
+	},
+	shadow: function (context, fill) {
+		this.path(context);
+		
+		context.save();
+		context.fillStyle = fill;
+		context.fill();
+		context.restore();
+	},
+	isPointInPath: function(pos) {
+		this.path();
+		
+		return this.context.isPointInPath(pos.x, pos.y);
+	}
+};
+
+function Index() {
+	this.initialize();
+}
+Index.prototype = {
+	initialize: function () {
+		this.map = {};
+		this.index = 0;
+	},
+	add: function (node) {
+		var index = numToRGBString(++this.index);
+		
+		this.map[index] = node;
+		
+		return index;
+	},
+	get: function (rgb) {
+		return this.map[rgbToRGBString(rgb)];
+	}
+};
+
+function Map(id, w, h) {
+	this.initialize(id, w, h);
+}
+Map.WIDTH = 300;
+Map.HEIGHT = 300;
+Map.STROKE = "rgba(0,0,230,0.4)";
+Map.prototype = {
+	initialize: function (id, w, h) {
+		this.map = document.getElementById(id);
+		this.canvas = document.createElement("canvas");
+		this._canvas = document.createElement("canvas");
+		this.context = this.canvas.getContext("2d");
+		this._context = this._canvas.getContext("2d");
+		this.nodes = [];
+		this.copy = null;
+		this.index = new Index();
+		this.draggable = {};
+		this.mouse = new Pos();
+		this.selectable = null;
+		
+		this.map.appendChild(this.canvas);
+		this.map.appendChild(this._canvas);
+		this._canvas.width = this.canvas.width = w || Map.WIDTH;
+		this._canvas.height = this.canvas.height = h || Map.HEIGHT;
+		
+		var _this = this;
+		this.map.onmousemove = function (event) {
+			event.preventDefault();
+			
+			var pos = _this.getPos(event);
+			if(pos.x == _this.mouse.x && pos.y == _this.mouse.y) {
+				return;
+			}
+			
+			_this.mouse = pos;
+			
+			var data = _this._context.getImageData(_this.mouse.x, _this.mouse.y, 1, 1).data, node;
+			
+			if((node = _this.index.get(data)) && node == _this.selectable) {
+				return;
+			}
+			
+			_this.selectable = node;
+			
+			if(node) {
+				console.log(node);
+			}
+			
+			if(_this.draggable.node && _this.copy) {
+				_this.drag(_this.mouse);
+			}
+		};
+		
+		this.map.onmousedown = function (event) {
+			event.preventDefault();
+			
+			_this.dragTest(_this.getPos(event));
+		};
+		
+		this.map.onmouseup = function (event) {
+			event.preventDefault();
+			
+			if(_this.draggable.node && _this.copy) {
+				_this.dragEnd();
+			}
+		};
+		
+		this.map.onmouseout = function (event) {
+			event.preventDefault();
+			
+			if(_this.draggable.node && _this.copy) {
+				_this.dragEnd();
+			}
+		};
+	},
+	drawGuide: function(pos) {
+		this.context.save();
+		this.context.beginPath();
+		this.context.strokeStyle = Map.STROKE;
+		this.context.lineWidth = 0.5;
+		this.context.moveTo(pos.x + 0.5, 0);
+		this.context.lineTo(pos.x + 0.5, this.canvas.height);
+		this.context.moveTo(0, pos.y + 0.5);
+		this.context.lineTo(this.canvas.width, pos.y + 0.5);
+		this.context.stroke();
+		this.context.restore();
+	},
+	dragTest: function(pos) {
+		//var data = this._context.getImageData(pos.x, pos.y, 1, 1).data,
+		//node = this.index.get(data);
+		
+		//if(node) {
+		if(this.selectable) {
+			this.nodes.splice(this.nodes.indexOf(this.selectable), 1);
+			this.nodes.push(this.draggable.node = this.selectable);
+			
+			this.dragStart(pos);
+		}
+	},
+	dragStart: function() {
+		this.copy = this.invalidate();
+		this.setOffset(this.mouse);
+		this.drag(this.mouse);
+	},
+	dragEnd: function() {
+		this.invalidate();
+		this.draggable.node.draw();
+		this.draggable.node = null;
+		//this.context.putImageData(this.copy, 0, 0);
+	},
+	drag: function(pos) {
+		var pos = this.rePos(pos);
+		
+		this.context.putImageData(this.copy, 0, 0);
+		this.draggable.node.rect.x = pos.x;
+		this.draggable.node.rect.y = pos.y;
+		this.draggable.node.draw();
+		this.drawGuide(pos);
+	},
+	addNode: function() {
+		var node = new Node(this.context, new Rect(Math.floor(Math.random() * this.canvas.width), Math.floor(Math.random() * this.canvas.height), 50, 50));
+		//console.log(Math.random() * this.canvas.width);
+		//var node = new Node(this.context);
+		
+		this.nodes.push(node);
+		
+		var index = this.index.add(node);
+		
+		node.draw(this.context);
+		node.shadow(this._context, index);
+	},
+	invalidate: function() {
+		this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		
+		for(var i=0, nodes=this.nodes, j=nodes.length-1; i<j; i++) { // 그리기는 순서대로, 선택은 반대로, 마지막이 선택된 것이므로 그리기 생략
+			nodes[i].draw();
+		}
+		
+		return this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+	},
+	setOffset: function(pos) {
+		this.draggable.offset = new Pos(pos.x - this.draggable.node.rect.x, pos.y - this.draggable.node.rect.y);
+	},
+	rePos: function(pos) {
+		return new Pos(pos.x - this.draggable.offset.x, pos.y - this.draggable.offset.y);
+	},
+	getPos: function(event) {
+		var rect = this.canvas.getBoundingClientRect();
+		
+		return new Pos(event.clientX - rect.left - this.canvas.clientLeft, event.clientY - rect.top - this.canvas.clientTop);
+	}
+}
+
+var map = new Map("canvas");
+
+map.addNode();
+map.addNode();
+</script>
+
+  </body>
+</html>
