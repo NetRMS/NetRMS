@@ -21,20 +21,21 @@
 	function Node(context, rect, stroke, fill, line) {
 		this.initialize(context, rect, stroke, fill, line);
 	}
-	Node.WIDTH = 50;
-	Node.HEIGHT = 50;
+	Node.WIDTH = 30;
+	Node.HEIGHT = 30;
 	Node.FILL = "rgba(255, 69, 0, 1)";
 	Node.STROKE = "rgba(0, 0, 230, 1)";
 	Node.LINE = 1;
 	Node.prototype = {
-		initialize: function (context, _context, rect, stroke, fill, line) {
+		initialize: function (context, _context, stroke, fill, line) {
 			this.context = context;
 			this._context = _context;
-			this.rect = rect || new Rect(0, 0, Node.WIDTH, Node.HEIGHT);
+			this.rect = new Rect(0, 0, Node.WIDTH, Node.HEIGHT);
 			this.stroke = stroke || Node.STROKE;
 			this.fill = fill || Node.FILL;
 			this.line = line || Node.LINE;
 			this.index;
+			this.handler = {};
 		},
 		path: function (context) {
 			context.beginPath();
@@ -44,33 +45,42 @@
 		draw: function () {
 			this.path(this.context);
 			
-			this.context.save();
+			//this.context.save();
 			this.context.strokeStyle = this.stroke;
 			this.context.fillStyle = this.fill;
 			this.context.lineWidth = 5/*this.line*/;
 			this.context.lineJoin = "round";
 			this.context.stroke();
 			this.context.fill();
-			
-			this.context.restore();
+			//this.context.restore();
 		},
 		shadow: function (index) {
 			this.path(this._context);
 			
-			this._context.save();
+			//this._context.save();
 			this._context.fillStyle = this.index = index || this.index;
 			this._context.fill();
-			this._context.restore();
+			//this._context.restore();
 		},
 		move: function(pos) {
 			this.rect.x = pos.x;
 			this.rect.y = pos.y;
 			
-			//this.draw();
+			this.dispatchEvent("move");
 		},
 		shift: function(pos) {
 			this.rect.x += pos.x;
 			this.rect.y += pos.y;
+			
+			this.dispatchEvent("move");
+		},
+		dispatchEvent: function (event) {
+			if(this.handler[event]) {
+				this.handler[event](this);
+			}
+		},
+		on: function (event, handler) {
+			this.handler[event] = handler;
 		}
 	};
 
@@ -119,6 +129,8 @@
 			this.handler = {};
 			this.size = this._size = size || Stage.SIZE;
 			this.ratio = 1;
+			this.min = new Pos(this.size, this.size/Math.sqrt(2));
+			this.max = new Pos(0, 0);
 			
 			document.documentElement.appendChild(this.canvas);
 			//document.documentElement.appendChild(this._canvas);
@@ -176,7 +188,7 @@
 			this.resize();
 		},
 		drawGuide: function (pos) {
-			this.context.save();
+			//this.context.save();
 			this.context.beginPath();
 			this.context.strokeStyle = Stage.STROKE;
 			this.context.lineWidth = 0.5;
@@ -185,7 +197,7 @@
 			this.context.moveTo(0, pos.y + 0.5);
 			this.context.lineTo(this.size, pos.y + 0.5);
 			this.context.stroke();
-			this.context.restore();
+			//this.context.restore();
 		},
 		onSelect: function () {
 			this.dispatchEvent("select", this.selected = this.selectable);
@@ -211,17 +223,22 @@
 			this.drawGuide(pos);
 		},
 		addNode: function () {
-			var node = new Node(this.context, this._context, new Rect(Math.floor(Math.random() * this.size), Math.floor(Math.random() * this.size/Math.sqrt(2)), 30, 30));
+			var _this = this,
+			node = new Node(this.context, this._context);
 			
 			this.nodes.push(node);
+			node.on("move", function(node){
+				_this.onMove(node);
+			});
 			
+			node.move(new Pos(Math.floor(Math.random() * this.size), Math.floor(Math.random() * this.size/Math.sqrt(2))));
 			node.draw();
 			node.shadow(this.index.add(node));
 		},
 		invalidate: function () {
 			this.context.clearRect(0, 0, this.size, this.size/Math.sqrt(2));
 			this._context.clearRect(0, 0, this.size, this.size/Math.sqrt(2));
-			
+
 			for(var i=0, nodes=this.nodes, j=nodes.length; i<j; i++) {
 				nodes[i].draw();
 				nodes[i].shadow();
@@ -245,93 +262,49 @@
 		zoom: function (ratio) {
 			this.ratio = ratio;
 			
-			this.canvas.width = this._canvas.width = this.size * this.ratio;
-			this.canvas.height = this._canvas.height = this.size/Math.sqrt(2) * this.ratio;
-			
-			this.context.scale(this.ratio, this.ratio);
-			this._context.scale(this.ratio, this.ratio);
-			
-			this.invalidate();
-			
-			this.align();
-			//window.dispatchEvent(new Event("resize"));
+			this.reset();
 		},
 		resize: function (size) {
 			if(size) {
 				this.size = size;
 			}
-			
-			this.canvas.width = this._canvas.width = this.size;
-			this.canvas.height = this._canvas.height = this.size/Math.sqrt(2);
-			
-			this.align();
-			//this.invalidate();
+		
+			this.reset();
 		},
-		adjust: function () {
-			var x, width, height;
+		reset: function () {
+			this.canvas.width = this._canvas.width = this.size * this.ratio;
+			this.canvas.height = this._canvas.height = this.size/Math.sqrt(2) * this.ratio;
 			
-			this.shift(-(x = this.adjustX(0)), -this.adjustY(x));
-			
-			height = this.adjustHeight(this.size);
-			width = this.adjustWidth(height);
-			
-			this.resize(Math.max(width, height*Math.sqrt(2)));
+			this.context.scale(this.ratio, this.ratio);
+			this._context.scale(this.ratio, this.ratio);
+
+			this.align();
 			
 			this.invalidate();
 		},
-		adjustX: function (y) {
-			var height = this.canvas.height,
-			width = this.canvas.width,
-			data;
+		adjust: function () {
 			
-			for(var i=0; i<width; i++) {
-				data = this.context.getImageData(i, y, 1, height - y).data;
-				for(var j=0, _j=(height-y)*4; j<_j; j++) {
-					if(data[j] > 0) {
-						return i;
-					}
-				}
-			}
+			this.shift(-this.min.x, -this.min.y);
+			this.resize(Math.max(this.max.x, this.max.y*Math.sqrt(2)));
+			
+			this.invalidate();
 		},
-		adjustY: function (x) {
-			var height = this.canvas.height,
-			width = this.canvas.width,
-			data;
-			
-			for(var i=0; i<height; i++) {
-				data = this.context.getImageData(x, i, width - x, 1).data;
-				for(var j=0, _j=(width-x)*4; j<_j; j++) {
-					if(data[j] > 0) {
-						return i;
-					}
-				}
+		onMove: function (node) { console.log(node);
+			if(node.rect.x < this.min.x) {
+				this.min.x = node.rect.x;
 			}
-		},
-		adjustWidth: function (height) {
-			var width = this.canvas.width,
-			data;
-			
-			while(width-- >0) {
-				data = this.context.getImageData(width, 0, 1, height).data;
-				for(var i=0, _i=height*4; i<_i; i++) {
-					if(data[i] > 0) {
-						return width + 1;
-					}
-				}
+			else if(node.rect.x > this.max.x) {
+				this.max.x = node.rect.x;
 			}
-		},
-		adjustHeight: function (width) {
-			var height = this.canvas.height,
-			data;
 			
-			while(height-- > 0) {
-				data = this.context.getImageData(0, height, width, 1).data;
-				for(var i=0, _i=width*4; i<_i; i++) {
-					if(data[i] > 0) {
-						return height + 1;
-					}
-				}
+			if(node.rect.y < this.min.y) {
+				this.min.y = node.rect.y;
 			}
+			else if(node.rect.y > this.max.y) {
+				this.max.y = node.rect.y;
+			}
+			
+			console.log(this.min.x + ","+ this.max.x + ","+ this.min.y + ","+ this.max.y);
 		},
 		shift: function (x, y) {
 			var pos = new Pos(x, y);
@@ -345,6 +318,8 @@
 		expand: function () {
 			this.resize(this.size + 100);
 			this.shift(50, 50/Math.sqrt(2));
+			
+			this.invalidate();
 		},
 		align: function () {
 			this.canvas.style.left = ((document.documentElement.clientWidth - this.canvas.width) / 2) +"px";
