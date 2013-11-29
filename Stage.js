@@ -42,25 +42,24 @@
 			context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
 			context.closePath();
 		},
-		draw: function () {
+		draw: function (selected) {
 			this.path(this.context);
-			
-			//this.context.save();
-			this.context.strokeStyle = this.stroke;
-			this.context.fillStyle = this.fill;
-			this.context.lineWidth = 5/*this.line*/;
-			this.context.lineJoin = "round";
-			this.context.stroke();
-			this.context.fill();
-			//this.context.restore();
-		},
-		shadow: function (index) {
 			this.path(this._context);
 			
-			//this._context.save();
-			this._context.fillStyle = this.index = index || this.index;
+			//this.context.save();
+			this.context.fillStyle = this.fill;
+			this.context.fill();
+			
+			if(selected) {
+				this.context.lineWidth = 5/*this.line*/;
+				this.context.strokeStyle = this.stroke;
+				this.context.lineJoin = "round";
+				this.context.stroke();
+			}
+			
+			this._context.fillStyle = this.index;
 			this._context.fill();
-			//this._context.restore();
+			//this.context.restore();
 		},
 		move: function(pos) {
 			this.rect.x = pos.x;
@@ -107,9 +106,7 @@
 	function Stage(id, w, h) {
 		this.initialize(id, w, h);
 	}
-	Stage.SIZE = 800;
-	Stage.WIDTH = 800;
-	Stage.HEIGHT = 800/Math.sqrt(2);
+	Stage.SIZE = 400;
 	Stage.STROKE = "silver";
 	Stage.prototype = {
 		initialize: function (size) {
@@ -125,6 +122,7 @@
 			this.mouse = new Pos();
 			this.selectable = null;
 			this.selected = null;
+			this.lastSelected = null;
 			this.offset = new Pos();
 			this.handler = {};
 			this.size = this._size = size || Stage.SIZE;
@@ -135,7 +133,9 @@
 			document.documentElement.appendChild(this.canvas);
 			//document.documentElement.appendChild(this._canvas);
 			
-			window.addEventListener("resize", this.align, false);			
+			window.addEventListener("resize", function (event) {
+				_this.align();
+			}, false);			
 			
 			this.canvas.onmousemove = function (event) {
 				event.preventDefault();
@@ -147,7 +147,7 @@
 				
 				_this.mouse = pos;
 				
-				if(_this.selected) { // drag
+				if(_this.selected) { // drag 
 					_this.drag();
 					
 					return;
@@ -171,6 +171,10 @@
 			
 			this.canvas.onmousedown = function (event) {
 				event.preventDefault();
+				
+				if(event.button != 0) {
+					return;
+				}
 				
 				if(_this.selectable) {
 					_this.onSelect();
@@ -200,26 +204,28 @@
 			//this.context.restore();
 		},
 		onSelect: function () {
-			this.dispatchEvent("select", this.selected = this.selectable);
+			this.dispatchEvent("select", this.lastSelected = this.selected = this.selectable);
 			
 			this.offset = new Pos(this.mouse.x/this.ratio - this.selected.rect.x, this.mouse.y/this.ratio - this.selected.rect.y);
 			this.nodes.splice(this.nodes.indexOf(this.selected), 1);
 			this.copy = this.invalidate();
-			this.selected.draw();
+			this.selected.draw(true);
 		},
 		onCancel: function () {
 			this.dispatchEvent("cancel", this.selected);
 			
+			this.invalidate(); // 여기서 부터 순서 조심
 			this.nodes.push(this.selected);
-			this.invalidate();
 			this.selected = null;
+			
+			this.lastSelected.draw(true);
 		},
 		drag: function () {
 			this.context.putImageData(this.copy, 0, 0);
 			
 			var pos = new Pos(this.mouse.x/this.ratio - this.offset.x, this.mouse.y/this.ratio - this.offset.y);
 			this.selected.move(pos);
-			this.selected.draw();
+			this.selected.draw(true);
 			this.drawGuide(pos);
 		},
 		addNode: function () {
@@ -231,9 +237,9 @@
 				_this.onMove(node);
 			});
 			
+			node.index = this.index.add(node);
 			node.move(new Pos(Math.floor(Math.random() * this.size), Math.floor(Math.random() * this.size/Math.sqrt(2))));
 			node.draw();
-			node.shadow(this.index.add(node));
 		},
 		invalidate: function () {
 			this.context.clearRect(0, 0, this.size, this.size/Math.sqrt(2));
@@ -241,7 +247,6 @@
 
 			for(var i=0, nodes=this.nodes, j=nodes.length; i<j; i++) {
 				nodes[i].draw();
-				nodes[i].shadow();
 			}
 			
 			return this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
@@ -279,32 +284,24 @@
 			this._context.scale(this.ratio, this.ratio);
 
 			this.align();
-			
-			this.invalidate();
 		},
 		adjust: function () {
+			var min = new Pos(this.size, this.size),
+			max = new Pos(0, 0);
 			
-			this.shift(-this.min.x, -this.min.y);
-			this.resize(Math.max(this.max.x, this.max.y*Math.sqrt(2)));
+			for(var i=0, _i=this.nodes.length, nodes=this.nodes; i<_i; i++) {
+				min.x = Math.min(min.x, nodes[i].rect.x);
+				min.y = Math.min(min.y, nodes[i].rect.y);
+				max.x = Math.max(max.x, nodes[i].rect.x + nodes[i].rect.w);
+				max.y = Math.max(max.y, nodes[i].rect.y + nodes[i].rect.h);
+			}
+			
+			this.shift(-min.x, -min.y);
+			this.resize(Math.max(max.x - min.x, (max.y - min.y)*Math.sqrt(2)));
 			
 			this.invalidate();
 		},
-		onMove: function (node) { console.log(node);
-			if(node.rect.x < this.min.x) {
-				this.min.x = node.rect.x;
-			}
-			else if(node.rect.x > this.max.x) {
-				this.max.x = node.rect.x;
-			}
-			
-			if(node.rect.y < this.min.y) {
-				this.min.y = node.rect.y;
-			}
-			else if(node.rect.y > this.max.y) {
-				this.max.y = node.rect.y;
-			}
-			
-			console.log(this.min.x + ","+ this.max.x + ","+ this.min.y + ","+ this.max.y);
+		onMove: function (node) {
 		},
 		shift: function (x, y) {
 			var pos = new Pos(x, y);
@@ -324,9 +321,11 @@
 		align: function () {
 			this.canvas.style.left = ((document.documentElement.clientWidth - this.canvas.width) / 2) +"px";
 			this.canvas.style.top = ((document.documentElement.clientHeight - this.canvas.height) / 2) +"px";
+			
+			this.invalidate();
 		}
 	};
 	
 	window.Stage = Stage;
 
-	}) ( window );
+}) ( window );
