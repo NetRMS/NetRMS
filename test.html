@@ -34,7 +34,8 @@ input[type=number] {
 	<div id="canvas"></div>
 	
 	<nav>
-	<button id="line">선긋기</button>
+		<button id="move">이동</button>
+		<button id="line">선긋기</button>
 		<button id="adjust">맞추기</button>
 		<button id="expand">확장</button>
 		<input type="range"  min="10" max="200" value="100" step="10" value="100" id="zoom">
@@ -48,6 +49,8 @@ for(var i=0; i< 10; i++) {
 	stage.addNode(Math.random() * width, Math.random() * width / Math.sqrt(2));
 }
 
+stage.invalidate();
+
 document.getElementById("zoom").onchange = function(event) {
 	stage.zoom(this.value/100);
 };
@@ -60,20 +63,24 @@ document.getElementById("expand").onclick = function(event) {
 	stage.expand();
 };
 
-document.getElementById("line").onclick = function(event) {
-	stage.mode("line");
+document.getElementById("move").onclick = function(event) {
+	stage.mode = Stage.MODE_MOVE;
 };
 
-stage.on("enter", function(node) {
-	document.documentElement.style.cursor = "pointer";
-});
-stage.on("leave", function(node) {
-	document.documentElement.style.cursor = "default";
-});
-stage.on("select", function(node) {
-	console.log("select"+ node);
-});
+document.getElementById("line").onclick = function(event) {
+	stage.mode = Stage.MODE_LINE;
+};
 
+/*
+stage.on("enter", function(node) {console.log("enter"); console.log(node);
+});
+stage.on("leave", function(node) {console.log("leave");console.log(node);
+});
+stage.on("select", function(node) {console.log("select");console.log(node);
+});
+stage.on("cancel", function(node) {console.log("cancel");console.log(node);
+});
+*/
 </script>
 
   </body>
