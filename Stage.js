@@ -18,60 +18,65 @@
 		this.y = y || 0;
 	}
 
-	function Node(context, rect, stroke, fill, line) {
-		this.initialize(context, rect, stroke, fill, line);
+	function Node(rect) {
+		this.initialize(rect);
 	}
-	Node.WIDTH = 30;
-	Node.HEIGHT = 30;
-	Node.FILL = "rgba(255, 69, 0, 1)";
-	Node.STROKE = "rgba(0, 0, 230, 1)";
-	Node.LINE = 1;
+	Node.COLOR_BORDER = "#c0c0c0";
 	Node.prototype = {
-		initialize: function (context, _context, stroke, fill, line) {
-			this.context = context;
-			this._context = _context;
-			this.rect = new Rect(0, 0, Node.WIDTH, Node.HEIGHT);
-			this.stroke = stroke || Node.STROKE;
-			this.fill = fill || Node.FILL;
-			this.line = line || Node.LINE;
+		initialize: function (rect) {
+			this.context;
+			this._context;
+			this.rect = rect;
 			this.index;
+			this.background = "#000000";
+			this.image = null;
 			this.handler = {};
+			this.lines = [];
 		},
-		path: function (context) {
-			context.beginPath();
-			context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
-			context.closePath();
-		},
-		draw: function (selected) {
-			this.path(this.context);
-			this.path(this._context);
+		draw: function (shadow) {
+			this.context.beginPath();
+			this.context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
+			this.context.closePath();
 			
-			//this.context.save();
-			this.context.fillStyle = this.fill;
-			this.context.fill();
+			this.context.lineWidth = 1;
+			this.context.strokeStyle = Node.COLOR_BORDER;
+			this.context.stroke();
 			
-			if(selected) {
-				this.context.lineWidth = 5/*this.line*/;
-				this.context.strokeStyle = this.stroke;
-				this.context.lineJoin = "round";
-				this.context.stroke();
+			if(this.image) {
+				this.context.drawImage(this.image, this.rect.x, this.rect.y, this.rect.w);
 			}
+			else {
+				this.context.fillStyle = this.background;
+				this.context.fill();
+			}
+			
+			if(shadow) {
+				this.shadow();
+			}
+		},
+		shadow: function () {
+			this._context.beginPath();
+			this._context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
+			this._context.closePath();
 			
 			this._context.fillStyle = this.index;
 			this._context.fill();
-			//this.context.restore();
+		},
+		border: function (width, color) {
+			this.context.beginPath();
+			this.context.rect(this.rect.x, this.rect.y , this.rect.w, this.rect.h);
+			this.context.closePath();
+			this.context.lineWidth = width || 1;
+			this.context.strokeStyle = color || Node.COLOR_BORDER;
+			this.context.stroke();
 		},
 		move: function(pos) {
 			this.rect.x = pos.x;
 			this.rect.y = pos.y;
-			
-			this.dispatchEvent("move");
 		},
 		shift: function(pos) {
 			this.rect.x += pos.x;
 			this.rect.y += pos.y;
-			
-			this.dispatchEvent("move");
 		},
 		dispatchEvent: function (event) {
 			if(this.handler[event]) {
@@ -108,6 +113,10 @@
 	}
 	Stage.SIZE = 400;
 	Stage.STROKE = "silver";
+	Stage.MODE_MOVE = 1;
+	Stage.MODE_LINE = 1 << 1;
+	Stage.COLOR_SELECTED = "#FF4500"; // orange red
+	Stage.COLOR_SELECTABLE = "#C0C0C0"; // silver
 	Stage.prototype = {
 		initialize: function (size) {
 			var _this = this;
@@ -122,78 +131,36 @@
 			this.mouse = new Pos();
 			this.selectable = null;
 			this.selected = null;
-			this.lastSelected = null;
 			this.offset = new Pos();
 			this.handler = {};
 			this.size = this._size = size || Stage.SIZE;
 			this.ratio = 1;
-			this.min = new Pos(this.size, this.size/Math.sqrt(2));
-			this.max = new Pos(0, 0);
+			this.mode = Stage.MODE_MOVE;
+			
+			this.context.lineJoin = this._context.lineJoin = "round";
 			
 			document.documentElement.appendChild(this.canvas);
-			//document.documentElement.appendChild(this._canvas);
+			document.documentElement.appendChild(this._canvas);
 			
 			window.addEventListener("resize", function (event) {
 				_this.align();
 			}, false);			
 			
-			this.canvas.onmousemove = function (event) {
-				event.preventDefault();
-				
-				var pos = _this.getPos(event);
-				if(pos.x == _this.mouse.x && pos.y == _this.mouse.y) { // 움직임 없는 이벤트 방지
-					return;
-				}
-				
-				_this.mouse = pos;
-				
-				if(_this.selected) { // drag 
-					_this.drag();
-					
-					return;
-				}
-				
-				var data = _this._context.getImageData(_this.mouse.x, _this.mouse.y, 1, 1).data, node;
-				if(node = _this.index.get(data)) { // 노드 감지
-					if(node != _this.selectable) { // enter 이벤트 발생
-						_this.dispatchEvent("enter", node);
-					}
-					else {
-						return; // 노드 변화가 없는 이벤트 방지
-					}
-				}
-				else if(_this.selectable){
-					_this.dispatchEvent("leave", _this.selectable);
-				}
-				
-				_this.selectable = node;
+			this.canvas.onmousemove = function(event) {
+				_this.onMouseMove.call(_this, event);
 			};
 			
 			this.canvas.onmousedown = function (event) {
-				event.preventDefault();
-				
-				if(event.button != 0) {
-					return;
-				}
-				
-				if(_this.selectable) {
-					_this.onSelect();
-				}
+				_this.onMouseDown.call(_this, event);
 			};
 			
 			this.canvas.onmouseup = this.canvas.onmouseout = function (event) {
-				event.preventDefault();
-				
-				if(_this.selected) {
-					_this.onCancel();
-				}
+				_this.onMouseUp.call(_this, event);
 			};
 			
 			this.resize();
 		},
 		drawGuide: function (pos) {
-			//this.context.save();
-			this.context.beginPath();
 			this.context.strokeStyle = Stage.STROKE;
 			this.context.lineWidth = 0.5;
 			this.context.moveTo(pos.x + 0.5, 0);
@@ -201,55 +168,199 @@
 			this.context.moveTo(0, pos.y + 0.5);
 			this.context.lineTo(this.size, pos.y + 0.5);
 			this.context.stroke();
-			//this.context.restore();
-		},
-		onSelect: function () {
-			this.dispatchEvent("select", this.lastSelected = this.selected = this.selectable);
-			
-			this.offset = new Pos(this.mouse.x/this.ratio - this.selected.rect.x, this.mouse.y/this.ratio - this.selected.rect.y);
-			this.nodes.splice(this.nodes.indexOf(this.selected), 1);
-			this.copy = this.invalidate();
-			this.selected.draw(true);
-		},
-		onCancel: function () {
-			this.dispatchEvent("cancel", this.selected);
-			
-			this.invalidate(); // 여기서 부터 순서 조심
-			this.nodes.push(this.selected);
-			this.selected = null;
-			
-			this.lastSelected.draw(true);
 		},
 		drag: function () {
-			this.context.putImageData(this.copy, 0, 0);
-			
 			var pos = new Pos(this.mouse.x/this.ratio - this.offset.x, this.mouse.y/this.ratio - this.offset.y);
+			
 			this.selected.move(pos);
-			this.selected.draw(true);
+			this.selected.draw();
+			
 			this.drawGuide(pos);
 		},
-		addNode: function () {
-			var _this = this,
-			node = new Node(this.context, this._context);
-			
-			this.nodes.push(node);
-			node.on("move", function(node){
-				_this.onMove(node);
-			});
-			
-			node.index = this.index.add(node);
-			node.move(new Pos(Math.floor(Math.random() * this.size), Math.floor(Math.random() * this.size/Math.sqrt(2))));
-			node.draw();
+		line: function () {
+			this.context.beginPath();
+			this.context.lineWidth = 1;
+			this.context.strokeStyle = "gold";
+			this.context.moveTo(this.selected.rect.x + this.selected.rect.w/2, this.selected.rect.y + this.selected.rect.h/2);
+			this.context.lineTo(this.mouse.x/this.ratio, this.mouse.y/this.ratio);
+			this.context.stroke();
+			this.context.closePath();
 		},
-		invalidate: function () {
-			this.context.clearRect(0, 0, this.size, this.size/Math.sqrt(2));
-			this._context.clearRect(0, 0, this.size, this.size/Math.sqrt(2));
-
-			for(var i=0, nodes=this.nodes, j=nodes.length; i<j; i++) {
-				nodes[i].draw();
+		onMouseMove: function (event) {
+			event.preventDefault();
+			
+			if(!this.isMouseMoved(event)) {
+				return;
 			}
 			
-			return this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+			this.context.putImageData(this.copy, 0, 0);
+			
+			if(this.selected) {	
+				if(this.mode == Stage.MODE_MOVE) {
+					this.drag();
+				}
+				else if(this.mode == Stage.MODE_LINE) {
+					this.line();
+				}
+			}
+			
+			if(this.selectable) {
+				this.selectable.border(3, Stage.COLOR_SELECTABLE);
+			}
+			
+			this.mouseTest();
+		},
+		onMouseDown: function (event) {
+			event.preventDefault();
+			
+			if(event.button != 0) {
+				return;
+			}
+			
+			if(this.selectable) {
+				this.onSelect();
+			}
+		},
+		onMouseUp: function (event) {
+			event.preventDefault();
+			
+			if(this.selected) {
+				this.onCancel();
+			}
+		},
+		onSelect: function () {
+			var node = this.selected = this.selectable;
+			
+			this.offset = new Pos(this.mouse.x/this.ratio - this.selected.rect.x, this.mouse.y/this.ratio - this.selected.rect.y);
+			
+			this.nodes.splice(this.nodes.indexOf(this.selected), 1); // 최상위로 다시 그려주기 위해 임시 제거
+			
+			if(this.mode == Stage.MODE_MOVE) {
+				this.invalidate();
+				
+				this.selected.draw();
+			}
+			else if(this.mode == Stage.MODE_LINE) {
+				this.nodes.push(this.selected); // 최상위로 다시 그려줌
+				
+				this.invalidate();
+			}
+			
+			this.dispatchEvent("select", node);
+		},
+		onCancel: function () {
+			var node = this.selected;
+			
+			this.selected = null;
+			
+			this.context.putImageData(this.copy, 0, 0);
+			
+			if(!this.selectable) {
+				return;
+			}
+			
+			if(this.mode == Stage.MODE_MOVE) {
+				this.nodes.push(node);
+				node.draw(true);
+			}
+			else if(this.mode == Stage.MODE_LINE) {
+				if(node != this.selectable) { // 자기 자신을 선택한 경우 제외
+					console.log("line created!");
+				}
+			}
+			
+			this.copy = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+			
+			this.selectable.border(3, this.COLOR_SELECTABLE);
+			
+			this.dispatchEvent("cancel", node);
+		},
+		onEnter: function () {
+			var node = this.selectable;
+			
+			node.border(3, Stage.COLOR_SELECTABLE);
+			
+			if(this.mode == Stage.MODE_MOVE) {
+				this.canvas.style.cursor = "move";
+			}
+			else if(this.mode == Stage.MODE_LINE) {
+				this.canvas.style.cursor = "crosshair";
+			}
+			else {
+				this.canvas.style.cursor = "pointer";
+			}
+			
+			this.dispatchEvent("enter", node);
+		},
+		onLeave: function () {			
+			var node = this.selectable;
+			
+			switch(this.mode) {
+			case Stage.MODE_MOVE:
+				
+				break;
+			default:
+			}
+			
+			this.context.putImageData(this.copy, 0, 0);
+			
+			this.canvas.style.cursor = "default";
+			
+			this.dispatchEvent("leave", node);
+		},
+		isMouseMoved: function (event) {
+			var pos = this.getPos(event);
+			
+			if(pos.x == this.mouse.x && pos.y == this.mouse.y) {
+				return false;
+			}
+			
+			this.mouse = pos;
+			
+			return true;
+		},
+		mouseTest: function () {
+			var data = this._context.getImageData(this.mouse.x, this.mouse.y, 1, 1).data, node;
+			
+			if(this.mode == Stage.MODE_MOVE && this.selected) {
+				return;
+			}
+			
+			if(node = this.index.get(data)) {
+				if(node != this.selectable) {
+					if(this.selectable) {
+						this.onLeave();
+					}
+					
+					this.selectable = node;
+					
+					this.onEnter();
+				}
+			}
+			else if(this.selectable){
+				this.onLeave();
+				this.selectable = null;
+			}
+		},
+		addNode: function () {
+			var node = new Node(new Rect(Math.floor(Math.random() * this.size), Math.floor(Math.random() * this.size/Math.sqrt(2)), 30, 30));
+			
+			node.background = "#000080"; // navy
+			node.index = this.index.add(node);
+			node.context = this.context;
+			node._context = this._context;			
+			
+			this.nodes.push(node);
+		},
+		invalidate: function () {
+			this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+			this._context.clearRect(0, 0, this._canvas.width, this._canvas.height);
+
+			for(var i=0, nodes=this.nodes, j=nodes.length; i<j; i++) {
+				nodes[i].draw(true);
+			}
+			
+			this.copy = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
 		},
 		getPos: function (event) {
 			var rect = this.canvas.getBoundingClientRect();
@@ -328,4 +439,4 @@
 	
 	window.Stage = Stage;
 
-}) ( window );
+}) (window);
