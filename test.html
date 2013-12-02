@@ -6,9 +6,7 @@
     <style>
 
 canvas {
-	position: absolute;
 	box-shadow: rgba(0, 0, 0, 0.2) 6px 6px 8px;
-	background-color: rgba(255, 255, 255, 0.5);
 }
 
 nav {
@@ -30,9 +28,7 @@ input[type=number] {
 	<script src="JS/Stage.js"></script>
 </head>
 
-<body>
-	<div id="canvas"></div>
-	
+<body>	
 	<nav>
 		<button id="move">이동</button>
 		<button id="line">선긋기</button>
@@ -42,11 +38,10 @@ input[type=number] {
 	</nav>
 <script>
 
-var stage = new Stage(),
-width = stage.size;
+var stage = new Stage(500);
 
 for(var i=0; i< 10; i++) {
-	stage.addNode(Math.random() * width, Math.random() * width / Math.sqrt(2));
+	stage.addNode(Math.random() * 500, Math.random() * 500 / Math.sqrt(2));
 }
 
 stage.invalidate();
