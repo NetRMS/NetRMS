@@ -14,14 +14,20 @@
 <script src="../JS/Stage2.js"></script>
 <script>
 	var stage = new Stage();
+	stage.on("enter", function(block) {
+		document.documentElement.style.cursor = "pointer";
+	});
+	stage.on("leave", function(block) {
+		document.documentElement.style.cursor = "default";
+	});
 	var block;
 	var start = new Date().getTime();
 	for(var i=0; i< 30; i++) {
-		block = stage.addBlock();
-		block.rect.x = Math.round(Math.random() * stage.maskLayer.width);
-		block.rect.y = Math.round(Math.random() * stage.maskLayer.height);
+		block = stage.addBlock(Math.round(Math.random() * stage.maskLayer.width), Math.round(Math.random() * stage.maskLayer.height));
 	}
 	stage.invalidate();
+	
+	stage.test1();
 	
 	console.log("걸린시간 : "+ (new Date().getTime() - start));
 </script>
