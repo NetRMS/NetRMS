@@ -66,35 +66,54 @@
 	
 	Block.prototype = {
 		draw: function () {
-			var context = stage.blockLayer.getContext("2d");
+			var context = stage.context.block;
 			
 			context.beginPath();
 			context.rect(this.rect.x - this.rect.w/2, this.rect.y -this.rect.h/2, this.rect.w, this.rect.h);
 			context.closePath();
 			
+			context.shadowBlur = 5;
+			context.shadowColor = "gray";
+			context.fillStyle = this.color;
+			context.fill();
+			
 			if(this.image) {
 				context.drawImage(this.image, this.rect.x - this.rect.w/2, this.rect.y - this.rect.h/2, this.rect.w);
 			}
-			else {
-				context.fillStyle = this.color;
-				context.fill();
-				context.lineWidth = Block.SIZE_BORDER;
-				context.strokeStyle = this.border;
-				context.stroke();
+		},
+		drawCopy: function () {
+			var context = stage.context.select;
+			
+			context.beginPath();
+			context.rect(this.rect.x - this.rect.w/2, this.rect.y -this.rect.h/2, this.rect.w, this.rect.h);
+			context.closePath();
+			
+			context.save();
+			context.shadowBlur = 5;
+			context.shadowColor = "black";
+			context.fillStyle = this.color;
+			context.fill();
+			context.restore();
+			
+			if(this.image) {
+				context.drawImage(this.image, this.rect.x - this.rect.w/2, this.rect.y - this.rect.h/2, this.rect.w);
 			}
 		},
-		shadow: function () {
-			var context = stage.shadowLayer.getContext("2d");
+		trace: function () {
+			var context = stage.context.trace;
 			
 			context.fillStyle = this.index;
 			context.fillRect(this.rect.x - this.rect.w/2, this.rect.y - this.rect.h/2, this.rect.w, this.rect.h);
 		},
-		setSelectionMark: function () {
-			var context = stage.maskLayer.getContext("2d");
+		drawSelected: function () {
+			var context = stage.context.selected;
 			
-			context.lineWidth = 3;
-			context.strokeStyle = Block.COLOR_SELECTED;
-			context.strokeRect(this.rect.x - this.rect.w/2, this.rect.y - this.rect.h/2, this.rect.w, this.rect.h);
+			context.beginPath();
+			context.rect(this.rect.x - this.rect.w/2, this.rect.y -this.rect.h/2, this.rect.w, this.rect.h);
+			context.closePath();
+			
+			context.fillStyle = this.color;
+			context.fill();
 		},
 		select: function () {
 			if (!this.selected) {
@@ -107,7 +126,7 @@
 			}
 		},
 		hover: function () {
-			var context = stage.maskLayer.getContext("2d");
+			var context = stage.context.mask;
 			
 			context.lineWidth = 3;
 			context.strokeStyle = Block.COLOR_HOVER;
@@ -149,15 +168,6 @@
 			this.blocks.splice(this.blocks.indexOf(block), 1);
 			this.xIndex.splice(this.xIndex.indexOf(block), 1);
 			this.yIndex.splice(this.yIndex.indexOf(block), 1);
-		},
-		copy: function () {
-			var blockArray = new BlockArray();
-			
-			blockArray.blocks = this.blocks.slice(0);
-			blockArray.xIndex = this.xIndex.slice(0);
-			blockArray.yIndex = this.yIndex.slice(0);
-			
-			return blockArray;
 		},
 		getBoundRect: function () {
 			return new Rect(this.xIndex[0].rect.x, this.yIndex[0].rect.y,
@@ -205,10 +215,22 @@
 	 */
 	function Stage () {
 		this.stage = document.createElement("div");
-		this.maskLayer = document.createElement("canvas");
-		this.shadowLayer = document.createElement("canvas");
-		this.blockLayer = document.createElement("canvas");
-		this.link = document.createElement("canvas");
+		this.layer = {
+			trace: document.createElement("canvas"),
+			link: document.createElement("canvas"),
+			block: document.createElement("canvas"),
+			selected: document.createElement("canvas"),
+			select: document.createElement("canvas"),
+			mask: document.createElement("canvas")
+		};
+		this.context = {
+			trace: this.layer.trace.getContext("2d"),
+			link: this.layer.link.getContext("2d"),
+			block: this.layer.block.getContext("2d"),
+			selected: this.layer.selected.getContext("2d"),
+			select: this.layer.select.getContext("2d"),
+			mask: this.layer.mask.getContext("2d")
+		};
 		this.index = new Index();
 		this.blocks = new BlockArray();
 		this.selectedBlocks = new BlockArray();
@@ -222,21 +244,19 @@
 		this.mouseDownPos = null;
 		this.selectedImage = null;
 		
-		this.maskLayer.width = this.shadowLayer.width = this.blockLayer.width = this.link.width = Stage.RESOLUTION[0];
-		this.maskLayer.height = this.shadowLayer.height = this.blockLayer.height = this.link.height = Stage.RESOLUTION[1];
-		
-		this.stage.style.position = this.maskLayer.style.position = this.shadowLayer.style.position = this.blockLayer.style.position = this.link.style.position = "absolute";
-		
 		document.documentElement.appendChild(this.stage);
-		//this.stage.appendChild(this.shadowLayer);
-		this.stage.appendChild(this.link);
-		this.stage.appendChild(this.blockLayer);
-		this.stage.appendChild(this.maskLayer);
 		
-		this.maskLayer.style.boxShadow = Stage.CANVAS_STYLE;
-		//this.blockLayer.style.left = "200px";
-		//this.shadowLayer.style.left = "400px";
+		var stage = this.stage, layers = this.layer, mask = this.layer.mask;
 		
+		for (var key in layers) {
+			layers[key].width = Stage.RESOLUTION[0];
+			layers[key].height = Stage.RESOLUTION[1];
+			layers[key].style.position = "absolute";
+			stage.appendChild(layers[key]);
+		}		
+		
+		this.context.selected.shadowBlur = 5;
+		this.context.selected.shadowColor = "blue";
 		
 		var _this = this;
 		window.addEventListener("resize", function (event) {
@@ -245,25 +265,19 @@
 			_this.eventHandler.onWindowResize.call(_this, event);
 		}, false);
 		
-		this.maskLayer.onmousemove = function(event) {
+		mask.onmousemove = function(event) {
 			event.preventDefault();
 			
 			_this.eventHandler.onMouseMove.call(_this, event);
 		};
 		
-		this.maskLayer.onmousedown = function (event) {
+		mask.onmousedown = function (event) {
 			event.preventDefault();
 			
 			_this.eventHandler.onMouseDown.call(_this, event);
 		};
 		
-		this.maskLayer.onmouseup = function (event) {
-			event.preventDefault();
-			
-			_this.eventHandler.onMouseUp.call(_this, event);
-		};
-		
-		this.maskLayer.onmouseout = function (event) {
+		mask.onmouseup = mask.onmouseout = function (event) {
 			event.preventDefault();
 			
 			_this.eventHandler.onMouseOut.call(_this, event);
@@ -271,15 +285,14 @@
 	}
 	
 	//Stage.RESOLUTION = [1189, 841];
-	Stage.RESOLUTION = [841, 594];
-	//Stage.RESOLUTION = [594, 420];
+	//Stage.RESOLUTION = [841, 594];
+	Stage.RESOLUTION = [594, 420];
 	//Stage.RESOLUTION = [420, 297];
 	//Stage.RESOLUTION = [297, 210];
 	
-	Stage.CANVAS_STYLE = "rgba(0, 0, 0, 0.5) 10px 10px 10px";
-	Stage.COLOR_GUIDELINE = "rgba(192, 192, 192, 0.5"; // alpha silver
-	Stage.COLOR_AREA = "rgba(105, 105, 105, 1"; // dim gray
-	Stage.SIZE_AREA = 3;
+	Stage.COLOR_GUIDELINE = "rgb(192, 192, 192)"; // alpha silver
+	Stage.COLOR_AREA = "rgb(105, 105, 105)"; // dim gray
+	Stage.SIZE_AREA = 2;
 	Stage.SIZE_GUIDELINE = 1;
 	Stage.MODE_OFF = 0;
 	Stage.MODE_MOVE = 1 << 1;
@@ -301,7 +314,7 @@
 		},
 		drawBlock: function (block) {
 			block.draw();
-			block.shadow();
+			block.trace();
 		},
 		invalidate: function () {
 			for(var i=0, blocks=this.blocks, _i=blocks.size(); i<_i; i++) {
@@ -309,10 +322,10 @@
 			}
 		},
 		getPos: function (event) {
-			var rect = this.maskLayer.getBoundingClientRect(),
-			canvas = this.maskLayer;
+			var stage = this.layer.mask,
+			rect = stage.getBoundingClientRect();
 			
-			return new Pos(event.clientX - rect.left - canvas.clientLeft, event.clientY - rect.top - canvas.clientTop);
+			return new Pos(event.clientX - rect.left - stage.clientLeft, event.clientY - rect.top - stage.clientTop);
 		},
 		isMouseMoved: function (event) {
 			var pos = this.getPos(event);
@@ -325,18 +338,9 @@
 			
 			return true;
 		},
-		dragEnd: function () {
-			var layer = this.maskLayer,
-			context = layer.getContext("2d");
-			
-			context.clearRect(0, 0, layer.width, layer.height); // 초기화
-			
-			if(this.mode & Stage.MODE_AREA) {
-				this.drawSelectedBlocks();
-			}
-		},
 		drawGuideLine: function () {
-			var context = this.maskLayer.getContext("2d"),
+			var context = this.context.mask,
+			layer = this.layer.mask,
 			pos = this.curPos;
 			
 			context.beginPath();
@@ -350,27 +354,28 @@
 			context.lineWidth = Stage.SIZE_GUIDELINE;
 			context.stroke();
 		},
-		drawSelectArea: function (rect) {
-			var context = this.maskLayer.getContext("2d");
+		drawSelectingRect: function (rect) {
+			var context = stage.context.mask;
 			
-			context.strokeStyle = Stage.COLOR_AREA;
-			context.lineWidth = Stage.SIZE_AREA;
-			context.strokeRect(rect.x, rect.y, rect.w, rect.h);
+			context.clearRect(0, 0, stage.layer.mask.width, stage.layer.mask.height);
+			
+			if (rect) {
+				context.strokeStyle = Stage.COLOR_AREA;
+				context.lineWidth = Stage.SIZE_AREA;
+				context.strokeRect(rect.x, rect.y, rect.w, rect.h);
+			}
 		},
 		drawSelectedBlocks: function () {
+			this.context.selected.clearRect(0, 0, this.layer.selected.width, this.layer.selected.height);
+			
 			for(var i=0, blocks=this.selectedBlocks, _i=blocks.size(); i<_i; i++) {
-				blocks.get(i).setSelectionMark();
+				blocks.get(i).drawSelected();
 			}
 		},
-		test1: function () {
-			var layer = this.maskLayer,
-			context = layer.getContext("2d");
+		getSelectedRect: function () {
+			var pos1 = this.mouseDownPos, pos2 = this.curPos;
 			
-			context.font = "16px bold";
-			for(var i=0; i<this.blocks.xIndex.length; i++) {
-				context.fillStyle = "red";
-				context.fillText(i, this.blocks.xIndex[i].rect.x+5, this.blocks.xIndex[i].rect.y);
-			}
+			return new Rect(Math.min(pos1.x, pos2.x), Math.min(pos1.y, pos2.y), Math.abs(pos2.x - pos1.x), Math.abs(pos2.y - pos1.y));
 		},
 		dispatchEvent: function (event, block) {
 			var eventHandler = this.eventHandler[event];
@@ -397,40 +402,29 @@
 				this.isDragging = true;
 			}
 			
-			if (this.isDragging) { // 드래그
-				var context = this.maskLayer.getContext("2d");
-				
-				context.clearRect(0, 0, this.maskLayer.width, this.maskLayer.height); // maskLayer 지워주고
-				
+			if (this.isDragging) { // 드래그				
 				if (this.selectable) { // 이동
-					var pos = new Pos(this.mouseDownPos.x - this.curPos.x, this.mouseDownPos.y - this.curPos.y);
+					var context = stage.context.mask;
 					
-					context.drawImage(pos.x, pos.y, this.selectedImage);				
+					context.clearRect(0, 0, this.layer.mask.width, this.layer.mask.height); // mask 지워주고
+					
+					context.drawImage(this.selectedImage, this.mouseDownPos.x - this.curPos.x, this.mouseDownPos.y - this.curPos.y);
 				}
 				else { // 선택
-					var pos1 = this.mouseDownPos, pos2 = this.curPos,
-					rect = new Rect(Math.min(pos1.x, pos2.x), Math.min(pos1.y, pos2.y), Math.abs(pos2.x - pos1.x), Math.abs(pos2.y - pos1.y)),
-					tmpBlocks = this.blocks.getBlocksInRect(rect);
+					var rect = this.getSelectedRect(),
+					blocks = this.blocks.getBlocksInRect(rect);
 					
-					for (var i=0, blocks=this.selectedBlocks, _i=blocks.size(); i<_i; i++) {
-						var block = blocks.get(i);
-						
-						if(tmpBlocks.indexOf(block) > -1) {
-							block.select();
-						}
+					this.context.select.clearRect(0, 0, this.layer.select.width, this.layer.select.height);
+					
+					for (var i=0, _i=blocks.length; i<_i; i++) {
+						blocks[i].drawCopy();
 					}
 					
-					for (var i=0, _i=tmpBlocks.length; i<_i; i++) {
-						tmpBlocks[i].setSelectionMark();
-					}
-					
-					this.drawSelectedBlocks();
-					
-					this.drawSelectArea(rect);
+					this.drawSelectingRect(rect);
 				}
 			}
 			else { // 검사
-				var block = this.index.get(this.shadowLayer.getContext("2d").getImageData(this.curPos.x, this.curPos.y, 1, 1).data);
+				var block = this.index.get(this.context.trace.getImageData(this.curPos.x, this.curPos.y, 1, 1).data);
 				
 				if (block != this.selectable) {
 					if (this.selectable) {
@@ -461,34 +455,44 @@
 			
 			if (!(event.shiftKey || event.ctrlKey)) { // 단순 클릭이면 전체 선택 해제
 				this.selectedBlocks.clear();
-				
-				this.maskLayer.getContext("2d").clearRect(0, 0, this.maskLayer.width, this.maskLayer.height);
-			}
+			}			
 			
 			var block = this.selectable;
 			if(!block) {
-				return;
+			
 			}
 			else {
 				block.select(); // Ctrl 상태에서는 선택 반전 될것
 				
 				if(block.selected) { // Move 할 수 있으므로, 선택 이미지 copy
 					var rect = this.selectedBlocks.getBoundRect();
-					this.selectedImage = this.maskLayer.getContext("2d").getImageData(rect.x, rect.y, rect.w, rect.h);
+					this.selectedImage = this.context.mask.getImageData(rect.x, rect.y, rect.w, rect.h);
 				}
 			}
 			
-			this.maskLayer.getContext("2d").clearRect(0, 0, this.maskLayer.width, this.maskLayer.height);
-			
 			this.drawSelectedBlocks();
 		},
-		onMouseUp: function (event) {			
-			this.mouseDownPos = null;
-			
+		onMouseOut: function (event) {			
 			if (this.isDragging) {	
 				this.isDragging = false;
 				
-				this.dragEnd();
+				if (this.selectable) { // 이동
+					
+				}
+				else { // 선택
+					var rect = this.getSelectedRect(),
+					blocks = this.blocks.getBlocksInRect(rect);
+					
+					this.context.select.clearRect(0, 0, this.layer.select.width, this.layer.select.height);
+					
+					for (var i=0, _i=blocks.length; i<_i; i++) {
+						blocks[i].select();
+					}
+					
+					this.drawSelectedBlocks();
+					
+					this.drawSelectingRect();
+				}
 			}
 			else {
 				/*
@@ -506,10 +510,8 @@
 			else {
 				this.selectedBlocks.push(block); // 선택
 			}*/
-		},
-		onMouseOut: function (event) {
+			
 			this.mouseDownPos = null;
-			this.isDragging = false;
 		}
 	};
 	
