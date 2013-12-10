@@ -2,34 +2,57 @@
 <html>
 
 <head>
-	<title>Dragging Polygons</title>
-	<meta charset="UTF-8">
-    <style>
+<title>Dragging Polygons</title>
+<meta charset="UTF-8">
+
+<style>
+#navigation {
+	text-align: right;
+}
 	</style>
 </head>
 
 <body>
-
+<div id="stage"></div>
+<div id="navigation">
+	<label><input type="checkbox" id="select">select</label>
+	<label><input type="checkbox" id="full">full</label>
+</div>
 <script src="../JS/Import.js"></script>
 <script src="../JS/Stage2.js"></script>
 <script>
-	var stage = new Stage();
+	var stage = new Stage("stage");
 	stage.on("enter", function(block) {
 		document.documentElement.style.cursor = "pointer";
 	});
 	stage.on("leave", function(block) {
-		document.documentElement.style.cursor = "default";
+		document.documentElement.style.cursor = "move";
 	});
 	var block;
 	var start = new Date().getTime();
-	for(var i=0; i< 30; i++) {
-		block = stage.addBlock(Math.round(Math.random() * stage.maskLayer.width), Math.round(Math.random() * stage.maskLayer.height));
+	for (var i=0; i< 30; i++) {
+		block = stage.addBlock(Math.round(Math.random() * stage.layer.mask.width), Math.round(Math.random() * stage.layer.mask.height));
 	}
 	stage.invalidate();
 	
-	stage.test1();
-	
-	console.log("걸린시간 : "+ (new Date().getTime() - start));
+	document.getElementById("select").addEventListener("change", function (event){
+		if (this.checked) {
+			stage.mode |= Stage.MODE_SELECT;
+		}
+		else {
+			stage.mode ^= Stage.MODE_SELECT;
+		}
+	}, false);
+	document.getElementById("full").addEventListener("change", function (event){
+		if (this.checked) {
+			stage.mode |= Stage.MODE_FULL;
+		}
+		else {
+			stage.mode ^= Stage.MODE_FULL;
+		}
+		
+		stage.fullScreen(this.checked);
+	}, false);
 </script>
 
   </body>
