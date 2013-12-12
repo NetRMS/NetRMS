@@ -2,20 +2,31 @@
 <html>
 
 <head>
-<title>Dragging Polygons</title>
+<title>Infrastructure Topology Administrator</title>
 <meta charset="UTF-8">
 
 <style>
-#navigation {
-	text-align: right;
+body {
+	padding: 0;
+	margin: 0;
 }
+
+#navigation {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 1;
+}
+
 	</style>
 </head>
 
 <body>
 <div id="stage"></div>
 <div id="navigation">
-	<label><input type="checkbox" id="select">select</label>
+	<button id="zoomout">-</button>
+	<button id="zoomin">+</button>
+	<label><input type="checkbox" id="move">move</label>
 	<label><input type="checkbox" id="full">full</label>
 </div>
 <script src="../JS/Import.js"></script>
@@ -23,35 +34,28 @@
 <script>
 	var stage = new Stage("stage");
 	stage.on("enter", function(block) {
-		document.documentElement.style.cursor = "pointer";
 	});
 	stage.on("leave", function(block) {
-		document.documentElement.style.cursor = "move";
 	});
 	var block;
 	var start = new Date().getTime();
-	for (var i=0; i< 30; i++) {
+	for (var i=0; i< 10; i++) {
 		block = stage.addBlock(Math.round(Math.random() * stage.layer.mask.width), Math.round(Math.random() * stage.layer.mask.height));
 	}
 	stage.invalidate();
 	
-	document.getElementById("select").addEventListener("change", function (event){
-		if (this.checked) {
-			stage.mode |= Stage.MODE_SELECT;
-		}
-		else {
-			stage.mode ^= Stage.MODE_SELECT;
-		}
+	document.getElementById("move").addEventListener("change", function (event){
+		stage.set(Stage.MODE_MOVE, this.checked);
 	}, false);
 	document.getElementById("full").addEventListener("change", function (event){
-		if (this.checked) {
-			stage.mode |= Stage.MODE_FULL;
-		}
-		else {
-			stage.mode ^= Stage.MODE_FULL;
-		}
-		
-		stage.fullScreen(this.checked);
+		stage.set(Stage.MODE_FULL, this.checked);
+		stage.fullScreen();
+	}, false);
+	document.getElementById("zoomin").addEventListener("click", function () {
+		stage.zoomIn();
+	}, false);
+	document.getElementById("zoomout").addEventListener("click", function () {
+		stage.zoomOut();
 	}, false);
 </script>
 
