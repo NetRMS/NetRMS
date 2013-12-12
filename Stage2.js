@@ -204,10 +204,6 @@
 			this.blocks = [];
 			this.xIndex = [];
 			this.yIndex = [];
-		},
-		raise: function (block) {
-			this.blocks.splice(this.blocks.indexOf(block), 1);
-			this.blocks.push(block);
 		}
 	};
 	
@@ -277,41 +273,23 @@
 			
 			this.documentOverflow = body.style.overflow;
 			
-			for (var key in layers) {
-				//if (key != "trace") {
-					layers[key].style.position = "absolute";
-					stage.appendChild(layers[key]);
-				//}
+			for (var k in layers) {
+				if (k != "trace") {
+					layers[k].style.position = "absolute";
+					stage.appendChild(layers[k]);
+				}
 			}
 			this.layer.trace.style.left = "600px";
 			this.layer.trace.style.border = "1px solid red";
 			this.layer.mask.style.boxShadow = "5px 5px 10px gray";
 				
-			this.resize(Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
+			this.reset(Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
 			
-			var _this = this;
-			
-			window.addEventListener("resize", function (event) {
-				_this.eventHandler.onWindowResize.call(_this, event);
-			}, false);
-			
-			mask.onmousemove = function(event) {
-				event.preventDefault();
-				
-				_this.eventHandler.onMouseMove.call(_this, event);
-			};
-			
-			mask.onmousedown = function (event) {
-				event.preventDefault();
-				
-				_this.eventHandler.onMouseDown.call(_this, event);
-			};
-			
-			mask.onmouseup = mask.onmouseout = function (event) {
-				event.preventDefault();
-				
-				_this.eventHandler.onMouseOut.call(_this, event);
-			};
+			window.addEventListener("resize", this.eventHandler.onWindowResize.bind(this), false);
+			mask.addEventListener("mousemove", this.eventHandler.onMouseMove.bind(this), false);
+			mask.addEventListener("mousedown", this.eventHandler.onMouseDown.bind(this), false);
+			mask.addEventListener("mouseup", this.eventHandler.onMouseOut.bind(this), false);
+			mask.addEventListener("mouseout", this.eventHandler.onMouseOut.bind(this), false);
 		},
 		addBlock: function (x, y) {
 			var block = new Block(this);
@@ -325,8 +303,8 @@
 			return block;
 		},
 		invalidate: function () {
-			this.context.block.clearRect(0, 0, this.layer.block.width, this.layer.block.height);
-			this.context.trace.clearRect(0, 0, this.layer.trace.width, this.layer.trace.height);
+			this.clear("block");
+			this.clear("trace");
 			
 			for(var i=0, blocks=this.blocks, _i=blocks.size(), block; i<_i; i++) {
 				block = blocks.get(i);
@@ -339,6 +317,11 @@
 			rect = stage.getBoundingClientRect();
 			
 			return new Pos((event.clientX - rect.left), (event.clientY - rect.top));
+		},
+		getBlock: function () {
+			var pos = this.curPos;
+			
+			return this.index.get(this.context.trace.getImageData(pos.x, pos.y, 1, 1).data);
 		},
 		isMouseMoved: function (event) {
 			var pos = this.getPos(event);
@@ -367,66 +350,116 @@
 			context.lineWidth = Stage.SIZE_GUIDELINE;
 			context.stroke();
 		},
-		drawSelectedBlocks: function () {
-			this.context.selected.clearRect(0, 0, this.layer.selected.width, this.layer.selected.height);
+		clear: function (key) {
+			var contexts = this.context, layers = this.layer;
 			
-			for(var i=0, blocks=this.selectedBlocks, _i=blocks.size(); i<_i; i++) {
-				blocks.get(i).drawSelected();
+			contexts[key].clearRect(0, 0, layers[key].width, layers[key].height);
+			
+			return contexts[key];
+		},
+		getImage: function (key) {
+			var layers = this.layer;
+			
+			return this.context[key].getImageData(0, 0, layers[key].width, layers[key].height);
+		},
+		shiftSelectedBlocksImage: function () {
+			var distance = this.getDistance(false), x = distance.x, y = distance.y;
+			
+			this.clear("selected").putImageData(this.selectedImage, x, y);
+		},
+		shiftSelectedBlocks: function () {
+			var distance = this.getDistance(true), x = distance.x, y = distance.y;
+			
+			this.clear("block");
+			this.clear("selected");
+			
+			for (var i=0, blocks = this.selectedBlocks, _i=blocks.size(), block; i<_i; i++) {
+				block = blocks.get(i);
+				block.rect.x += x;
+				block.rect.y += y;
+				
+				this.blocks.remove(block);
+				this.blocks.push(block);
 			}
-		},
-		copySelectedImage: function () {
-			var ct = this.context.selected, layer = this.layer.mask;
 			
-			this.selectedImage = ct.getImageData(0, 0, layer.width, layer.height);
-		},
-		shiftSelectedImage: function () {
-			var ct = this.context.selected, layer = this.layer.mask;
+			this.selectedBlocks.clear();
 			
-			ct.clearRect(0, 0, layer.width, layer.height);
-			ct.putImageData(this.selectedImage, x, y);
+			this.invalidate();
 		},
-		copyStage: function () {
-			var cts = this.context, ct = cts.mask, layers = this.layer, layer = layers.mask;
-			
-			ct.clearRect(0, 0, layer.width, layer.height);
+		copyStageImage: function () {
+			var layers = this.layer, ct = this.clear("mask");
 			
 			for (var k in layers) {
 				if (k != "mask") {
-					cts[k].clearRect(0, 0, layers[k].width, layers[k].height);
+					this.clear(k);
 					if(k != "trace") {
 						ct.drawImage(layers[k], 0, 0);
 					}
 				}
 			}
 			
-			this.stageImage = ct.getImageData(0, 0, layer.width, layer.height);
+			this.stageImage = this.getImage("mask");
 		},
-		shiftStage: function () {
-			var ct = this.context.mask, layer = this.layer.mask,
-			distance = this.getDistance(false), x = distance.x, y = distance.y;
+		shiftStageImage: function () {
+			var distance = this.getDistance(false), x = distance.x, y = distance.y,
+			ct = this.clear("mask");
 			
-			ct.clearRect(0, 0, layer.width, layer.height);
 			ct.putImageData(this.stageImage, x, y);
 		},
-		selectArea: function () {
-			var p1 = this.mouseDownPos, p2 = this.curPos, layer = this.layer.mask, ct = this.context.mask, z = this.zoomValue;
-			rect = new Rect(Math.min(p1.x, p2.x) / z, Math.min(p1.y, p2.y) / z, Math.abs(p1.x - p2.x) / z, Math.abs(p1.y - p2.y) / z),
-			blocks = this.blocks.getBlocksInRect(rect);
+		shiftAllBlocks: function () {
+			var distance = this.getDistance(true), x = distance.x, y = distance.y;
 			
-			ct.clearRect(0, 0, layer.width, layer.height);
+			this.clear("mask");
+			
+			for (var i=0, blocks=this.blocks, _i=blocks.size(); i<_i; i++) {
+				blocks.get(i).rect.x += x;
+				blocks.get(i).rect.y += y;
+			}
+			
+			this.invalidate();
+		},
+		drawSelectingArea: function () {
+			var rect = this.getSelectingRect(),
+			blocks = this.blocks.getBlocksInRect(rect),
+			ct = this.clear("mask");
+			
 			ct.strokeRect(rect.x, rect.y, rect.w, rect.h);
 			
-			ct = this.context.select;
-			ct.clearRect(0, 0, layer.width, layer.height);
+			this.clear("select");
 			
 			for (var i=0, _i=blocks.length; i<_i; i++) {
 				blocks[i].drawSelect();
 			}
 		},
-		getSelectedRect: function () {
-			var pos1 = this.mouseDownPos, pos2 = this.curPos;
+		drawSelectedBlocks: function () {
+			this.clear("selected");
 			
-			return new Rect(Math.min(pos1.x, pos2.x), Math.min(pos1.y, pos2.y), Math.abs(pos2.x - pos1.x), Math.abs(pos2.y - pos1.y));
+			for(var i=0, blocks=this.selectedBlocks, _i=blocks.size(); i<_i; i++) {
+				blocks.get(i).drawSelected();
+			}
+		},
+		addSelectedBlocks: function () {
+			var rect = this.getSelectingRect(),
+			blocks = this.blocks.getBlocksInRect(rect);
+			
+			this.clear("mask");
+			this.clear("select");
+			
+			for (var i=0, _i=blocks.length; i<_i; i++) {
+				blocks[i].select();
+			}
+			
+			this.drawSelectedBlocks();
+		},
+		getBlocksInSelectingRect: function () {
+			var p1 = this.mouseDownPos, p2 = this.curPos, z = this.zoomValue;
+			
+			return this.blocks.getBlocksInRect(new Rect(Math.min(p1.x, p2.x) / z, Math.min(p1.y, p2.y) / z, Math.abs(p1.x - p2.x) / z, Math.abs(p1.y - p2.y) / z));
+		},
+		getSelectingRect: function () {
+			var p1 = this.mouseDownPos, p2 = this.curPos, z = this.zoomValue;
+			
+			return new Rect(Math.min(p1.x, p2.x) / z, Math.min(p1.y, p2.y) / z, Math.abs(p1.x - p2.x) / z, Math.abs(p1.y - p2.y) / z);
 		},
 		initContext: function () {
 			var ct = this.context;
@@ -449,31 +482,17 @@
 			ct.mask.strokeStyle = Stage.COLOR_GUIDE;
 			ct.mask.lineWidth = 1;
 		},
-		resize: function (w, h) {
-			this.reset(w, h);
-			
-			this.invalidate();
-		},
-		zoom: function () {
-			var c = this.context, v = this.zoomValue;
-			
-			this.reset();
-			
-			for (var k in c) {
-				c[k].scale(v , v);
-			}
-			
-			this.invalidate();
-		},
 		reset: function (w, h) {
-			var l = this.layer;
+			var contexts = this.context, layers = this.layer, v = this.zoomValue;
 			
-			for (var k in l) {
-				l[k].width = w || l[k].width;
-				l[k].height = h || l[k].height;
+			for (var k in layers) {
+				layers[k].width = w || layers[k].width;
+				layers[k].height = h || layers[k].height;
+				contexts[k].scale(v, v);
 			}
 			
 			this.initContext();
+			this.invalidate();
 		},
 		set: function (mode, on) {
 			if (on) {
@@ -510,18 +529,18 @@
 			if (this.zoomValue < Stage.ZOOM_MAX) {
 				this.zoomValue += 0.1;
 				
-				this.zoom();
+				this.reset();
 				
 				return true;
 			}
 			
 			return false;
 		},
-		zoomOut: function (zoomIn) {
+		zoomOut: function () {
 			if (this.zoomValue > 0) {
 				this.zoomValue -= 0.1;
 				
-				this.zoom();
+				this.reset();
 				
 				return true;
 			}
@@ -540,12 +559,12 @@
 			if (this.mode & Stage.MODE_FULL) {
 				body.style.overflow = "hidden";
 				
-				this.resize(body.clientWidth, body.clientHeight);
+				this.reset(body.clientWidth, body.clientHeight);
 			}
 			else {
 				body.style.overflow = this.documentOverflow;
 				
-				this.resize(Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
+				this.reset(Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
 			}
 		},
 		onMouseMove: function (event) {
@@ -562,11 +581,11 @@
 				 */
 				
 				if (this.selectable) { // Block 이동
-					this.copySelectedImage();
+					this.selectedImage = this.getImage("selected");
 				}
 				else {
 					if (this.mode & Stage.MODE_MOVE) { // Stage 이동
-						this.copyStage();
+						this.copyStageImage();
 					}
 					else { // 선택
 						
@@ -581,19 +600,24 @@
 				 */
 				
 				if (this.selectable) { // Block 이동
-					this.shiftSelectedImage();
+					this.shiftSelectedBlocksImage();
 				}
 				else {
 					if (this.mode & Stage.MODE_MOVE) { // Stage 이동
-						this.shiftStage();
+						this.shiftStageImage();
 					}
-					else { // 영역 선택
-						this.selectArea();
+					else { // Area 선택
+						this.drawSelectingArea();
 					}
 				}
 			}
 			else { // 검사
-				var block = this.index.get(this.context.trace.getImageData(this.curPos.x, this.curPos.y, 1, 1).data);
+				
+				/*
+				 * Over
+				 */
+				
+				var block = this.getBlock();
 				
 				if (block != this.selectable) {
 					if (this.selectable) {
@@ -638,51 +662,15 @@
 			if (this.isDragging) {	
 				this.isDragging = false;
 				
-				var distance = this.getDistance(true), x = distance.x, y = distance.y;
-				
 				if (this.selectable) { // Block 이동
-					
-					this.context.block.clearRect(0, 0, this.layer.block.width, this.layer.block.height);
-					this.context.selected.clearRect(0, 0, this.layer.selected.width, this.layer.selected.height);
-					
-					for (var i=0, blocks = this.selectedBlocks, _i=blocks.size(), block; i<_i; i++) {
-						block = blocks.get(i);
-						block.rect.x += x;
-						block.rect.y += y;
-						
-						this.blocks.remove(block);
-						this.blocks.push(block);
-						
-					}
-					
-					this.invalidate();
-					
-					this.selectedBlocks.clear();
+					this.shiftSelectedBlocks();
 				}
 				else { // 화면 이동
 					if (this.mode & Stage.MODE_MOVE) {
-						this.context.mask.clearRect(0, 0, this.layer.mask.width, this.layer.mask.height);
-						
-						for (var i=0, blocks=this.blocks, _i=blocks.size(); i<_i; i++) {
-							blocks.get(i).rect.x += x;
-							blocks.get(i).rect.y += y;
-						}
-						
-						this.invalidate();
+						this.shiftAllBlocks();
 					}
 					else { // 영역 선택
-						var rect = this.getSelectedRect(),
-						blocks = this.blocks.getBlocksInRect(rect);
-						
-						this.context.select.clearRect(0, 0, this.layer.select.width, this.layer.select.height);
-						
-						for (var i=0, _i=blocks.length; i<_i; i++) {
-							blocks[i].select();
-						}
-						
-						this.drawSelectedBlocks();
-						
-						this.context.mask.clearRect(0, 0, this.layer.mask.width, this.layer.mask.height);
+						this.addSelectedBlocks();
 					}
 				}
 			}
