@@ -68,6 +68,11 @@
 			this.selected = false;
 			this.links = {};
 		},
+		path: function (context) {
+			context.beginPath();
+			context.rect(this.rect.x - this.rect.w/2, this.rect.y -this.rect.h/2, this.rect.w, this.rect.h);
+			context.closePath();
+		},
 		draw: function () {
 			var context = this.stage.context.block;
 			
@@ -229,6 +234,7 @@
 	Stage.MODE_DEFAULT = 0;
 	Stage.MODE_MOVE = 1 << 1;
 	Stage.MODE_FULL = 1<< 2;
+	Stage.MODE_SELECT = 1 << 3;
 	Stage.AREA_STYLE = "1px solid red";
 	
 	Stage.prototype = {
@@ -256,7 +262,7 @@
 			this.lastPos = new Pos();
 			this.curPos = new Pos();
 			this.selectable = null;
-			this.mode = Stage.MODE_DEFAULT;
+			this.mode = Stage.MODE_SELECT;
 			this.dragged = false;
 			this.isDragging = false;
 			this.translate = new Pos();
@@ -265,6 +271,7 @@
 			this.stageImage = null;
 			this.zoomValue = Stage.ZOOM_DEFAULT;
 			this.documentOverflow = "";
+			this.eventHandler = {};
 			
 			var stage = this.stage, layers = this.layer, mask = this.layer.mask,
 			body = document.documentElement;
@@ -285,11 +292,26 @@
 				
 			this.reset(Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
 			
-			window.addEventListener("resize", this.eventHandler.onWindowResize.bind(this), false);
-			mask.addEventListener("mousemove", this.eventHandler.onMouseMove.bind(this), false);
-			mask.addEventListener("mousedown", this.eventHandler.onMouseDown.bind(this), false);
-			mask.addEventListener("mouseup", this.eventHandler.onMouseOut.bind(this), false);
-			mask.addEventListener("mouseout", this.eventHandler.onMouseOut.bind(this), false);
+			window.addEventListener("resize", Stage.eventHandler.onWindowResize.bind(this), false);
+			mask.addEventListener("mousemove", Stage.eventHandler.onMouseMove.bind(this), false);
+			mask.addEventListener("mousedown", Stage.eventHandler.onMouseDown.bind(this), false);
+			mask.addEventListener("mouseup", Stage.eventHandler.onMouseOut.bind(this), false);
+			mask.addEventListener("mouseout", Stage.eventHandler.onMouseOut.bind(this), false);
+		},
+		addLayer: function (layer) {
+			var canvas = layer.canvas;
+			
+			//this.stage.appendChild(canvas);
+			this.stage.insertBefore(canvas, this.layer.mask);
+			
+			canvas.width = this.layer.mask.width;
+			canvas.height = this.layer.mask.height;
+			canvas.style.position = "absolute";
+			
+			layer.set();
+		},
+		cursor: function (style) {
+			this.layer.mask.style.cursor = style;
 		},
 		addBlock: function (x, y) {
 			var block = new Block(this);
@@ -351,9 +373,9 @@
 			context.stroke();
 		},
 		clear: function (key) {
-			var contexts = this.context, layers = this.layer;
+			var contexts = this.context, layers = this.layer, z = this.zoomValue;
 			
-			contexts[key].clearRect(0, 0, layers[key].width, layers[key].height);
+			contexts[key].clearRect(0, 0, layers[key].width / z, layers[key].height / z);
 			
 			return contexts[key];
 		},
@@ -362,12 +384,12 @@
 			
 			return this.context[key].getImageData(0, 0, layers[key].width, layers[key].height);
 		},
-		shiftSelectedBlocksImage: function () {
+		shiftSelectedBlocksImage: function () { // canvas에 그릴때는 false
 			var distance = this.getDistance(false), x = distance.x, y = distance.y;
 			
 			this.clear("selected").putImageData(this.selectedImage, x, y);
 		},
-		shiftSelectedBlocks: function () {
+		shiftSelectedBlocks: function () { // 좌표 다룰때는 true
 			var distance = this.getDistance(true), x = distance.x, y = distance.y;
 			
 			this.clear("block");
@@ -391,22 +413,23 @@
 			
 			for (var k in layers) {
 				if (k != "mask") {
-					this.clear(k);
 					if(k != "trace") {
 						ct.drawImage(layers[k], 0, 0);
 					}
+					
+					this.clear(k);
 				}
 			}
 			
-			this.stageImage = this.getImage("mask");
+			this.stageImage = this.getImage("mask"); 
 		},
-		shiftStageImage: function () {
+		shiftStageImage: function () { // 그릴때는 false
 			var distance = this.getDistance(false), x = distance.x, y = distance.y,
 			ct = this.clear("mask");
 			
 			ct.putImageData(this.stageImage, x, y);
 		},
-		shiftAllBlocks: function () {
+		shiftAllBlocks: function () { // 좌표는 true
 			var distance = this.getDistance(true), x = distance.x, y = distance.y;
 			
 			this.clear("mask");
@@ -417,20 +440,17 @@
 			}
 			
 			this.invalidate();
-		},
+		},/*
 		drawSelectingArea: function () {
 			var rect = this.getSelectingRect(),
-			blocks = this.blocks.getBlocksInRect(rect),
-			ct = this.clear("mask");
-			
-			ct.strokeRect(rect.x, rect.y, rect.w, rect.h);
-			
+			blocks = this.blocks.getBlocksInRect(rect);
+
 			this.clear("select");
 			
 			for (var i=0, _i=blocks.length; i<_i; i++) {
 				blocks[i].drawSelect();
 			}
-		},
+		},*/
 		drawSelectedBlocks: function () {
 			this.clear("selected");
 			
@@ -438,25 +458,12 @@
 				blocks.get(i).drawSelected();
 			}
 		},
-		addSelectedBlocks: function () {
-			var rect = this.getSelectingRect(),
-			blocks = this.blocks.getBlocksInRect(rect);
-			
-			this.clear("mask");
-			this.clear("select");
-			
-			for (var i=0, _i=blocks.length; i<_i; i++) {
-				blocks[i].select();
-			}
-			
-			this.drawSelectedBlocks();
-		},
 		getBlocksInSelectingRect: function () {
 			var p1 = this.mouseDownPos, p2 = this.curPos, z = this.zoomValue;
 			
 			return this.blocks.getBlocksInRect(new Rect(Math.min(p1.x, p2.x) / z, Math.min(p1.y, p2.y) / z, Math.abs(p1.x - p2.x) / z, Math.abs(p1.y - p2.y) / z));
 		},
-		getSelectingRect: function () {
+		getDragRect: function () {
 			var p1 = this.mouseDownPos, p2 = this.curPos, z = this.zoomValue;
 			
 			return new Rect(Math.min(p1.x, p2.x) / z, Math.min(p1.y, p2.y) / z, Math.abs(p1.x - p2.x) / z, Math.abs(p1.y - p2.y) / z);
@@ -516,43 +523,41 @@
 			return new Pos(0, 0);
 		},
 		fullScreen: function () {
-			this.eventHandler.onWindowResize.call(this);
-		},
-		dispatchEvent: function (event, block) {
-			var eventHandler = this.eventHandler[event];
-			
-			if (eventHandler) {
-				eventHandler (block);
-			}
+			Stage.eventHandler.onWindowResize.call(this);
 		},
 		zoomIn: function () {
 			if (this.zoomValue < Stage.ZOOM_MAX) {
 				this.zoomValue += 0.1;
 				
 				this.reset();
-				
-				return true;
 			}
-			
-			return false;
 		},
 		zoomOut: function () {
 			if (this.zoomValue > 0) {
 				this.zoomValue -= 0.1;
 				
 				this.reset();
-				
-				return true;
 			}
-			
-			return false;
 		},
-		on: function (event, eventHandler) {
-			this.eventHandler[event] = eventHandler;
+		fire: function (type, event) {
+			var handler = this.eventHandler[type];
+			
+			if (handler) {
+				for (var i=0, _i=handler.length; i<_i; i++) {
+					handler[i](event);
+				}
+			}
+		},
+		on: function (type, handler) {
+			var tmp = this.eventHandler[type] || [];
+			
+			tmp.push(handler);
+			
+			this.eventHandler[type] = tmp;
 		}
 	};
 	
-	Stage.prototype.eventHandler = {
+	Stage.eventHandler = {
 		onWindowResize: function (event) {
 			var body = document.documentElement;
 			
@@ -591,14 +596,14 @@
 						
 					}
 				}
+				
+				this.fire("dragstart", {
+					"type": "dragstart",
+					"block": this.selectable
+				});
 			}
 			
 			if (this.isDragging) {
-				
-				/*
-				 * Drag !!!
-				 */
-				
 				if (this.selectable) { // Block 이동
 					this.shiftSelectedBlocksImage();
 				}
@@ -607,9 +612,17 @@
 						this.shiftStageImage();
 					}
 					else { // Area 선택
-						this.drawSelectingArea();
+						//this.drawSelectingArea();
 					}
 				}
+				
+				this.fire("drag", {
+					"type": "drag",
+					"x": x,
+					"y": y,
+					"block": this.selectable,
+					"rect": this.getDragRect()
+				});
 			}
 			else { // 검사
 				
@@ -621,14 +634,16 @@
 				
 				if (block != this.selectable) {
 					if (this.selectable) {
-						this.dispatchEvent("leave", this.selectable);
-						
-						this.layer.mask.style.cursor = "default";
+						this.fire("leave", {
+							"type": "leave",
+							"block": this.selectable
+						});
 					}
 					if (block) {
-						this.dispatchEvent("enter", block);
-						
-						this.layer.mask.style.cursor = "pointer";
+						this.fire("enter", {
+							"type": "enter",
+							"block": block
+						});
 					}
 				}
 				
@@ -642,21 +657,18 @@
 			
 			this.mouseDownPos = this.getPos(event);
 			
-			var block = this.selectable;
-			if(!block) {
-				if (!(event.shiftKey || event.ctrlKey)) { // 단순 클릭이면 전체 선택 해제
-					this.selectedBlocks.clear();
-				}
-			}
-			else {
-				if (!(event.shiftKey || event.ctrlKey) && !block.selected) { // 단순 클릭이고 선택된 Block을 클릭한것이 아니면 선택 해제
-					this.selectedBlocks.clear();
-				}
-				
-				block.select(event.ctrlKey && !event.shiftKey); // Ctrl 상태에서는 선택 반전 될것
+			if (!(event.shiftKey || event.ctrlKey) && !(this.selectable && this.selectable.selected)) {
+				this.fire("cancel", {
+					"type": "cancel"
+				});
 			}
 			
-			this.drawSelectedBlocks();
+			if (this.selectable) {
+				this.selectable.select(event.ctrlKey && !event.shiftKey);
+				this.fire("select", {
+					"type": "select"
+				});
+			}
 		},
 		onMouseOut: function (event) {
 			if (this.isDragging) {	
@@ -670,9 +682,18 @@
 						this.shiftAllBlocks();
 					}
 					else { // 영역 선택
-						this.addSelectedBlocks();
+						var rect = this.getDragRect(),
+						blocks = this.blocks.getBlocksInRect(rect);
+						
+						for (var i=0, _i=blocks.length; i<_i; i++) {
+							blocks[i].select();
+						}
 					}
 				}
+				
+				this.fire("dragend", {
+					"type": "dragend"
+				});
 			}
 			else {
 			}
@@ -681,6 +702,170 @@
 		}
 	};
 	
-	window.Stage = Stage;
+	function BlockManager (stage) {
+		this.initialize(stage);
+	}
+	BlockManager.prototype = {
+		initialize: function (stage) {
+			this.stage = stage;
+			
+			//stage.on()
+		}
+	};
+	
+	function DefaultManager (stage) {
+		this.initialize(stage);
+	}
+	DefaultManager.prototype = {
+		initialize: function (stage) {
+			this.stage = stage;
+			
+			stage.on("enter", this.onEnter);
+			stage.on("leave", this.onLeave);
+		},
+		onLeave: function (data) {
+			stage.cursor("default");
+		},
+		onEnter: function (data) {
+			stage.cursor("pointer");
+		}
+	};
+	
+	function StageManager () {
+	}
+	StageManager.prototype = {
+		initialize: function (stage) {
+			this.stage = stage;
+			this.canvas = document.createElement("canvas");
+			this.context = this.canvas.getContext("2d");
+		},
+		clear: function () {
+			this.context.clearRect(0, 0, this.canvas.width / this.stage.zoomValue, this.canvas.height / this.stage.zoomValue);
+		},
+		copy: function () {
+			this.image = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+		},
+		load: function () {
+			this.context.putImageData();
+		}
+	};
+	
+	/*
+	function XxxManager (stage) {
+		this.initialize(stage);
+	}
+	XxxManager.prototype = new StageManager();
+	
+	XxxManager.prototype.initialize = function (stage) {
+		StageManager.prototype.initialize.call(this,stage);
+	};
+	XxxManager.prototype.onDragStart = function (data) {
+	};
+	XxxManager.prototype.onDrag = function (data) {
+	};
+	XxxManager.prototype.onDragEnd = function (data) {
+	};
+	XxxManager.prototype.set = function () {	
+	};
+	*/
+	
+	function SelectManager (stage) {
+		this.initialize(stage);
+	}
+	SelectManager.prototype = new StageManager();
+	
+	SelectManager.prototype.initialize = function (stage) {
+		StageManager.prototype.initialize.call(this,stage);
+		
+		stage.on("cancel", this.reDraw.bind(this));
+		stage.on("select", this.reDraw.bind(this));
+		stage.on("dragstart", this.ready.bind(this));
+		stage.on("drag", this.drag.bind(this));
+		stage.on("dragend", this.reDraw.bind(this));
+	};
+	SelectManager.prototype.reDraw = function (event) {
+		this.clear();
+		
+		if (event.type == "cancel") {
+			this.stage.selectedBlocks.clear();
+		}
+		else {
+			var context = this.context,
+			blocks = this.stage.selectedBlocks,
+			block;
+			
+			for (var i=0, _i=blocks.size(); i<_i; i++) {
+				block = blocks.get(i);
+				block.path(context);
+				context.stroke();
+			}
+		}
+	};
+	SelectManager.prototype.ready = function (event) {
+		this.copy();
+	};
+	SelectManager.prototype.drag = function (event) {
+		this.clear();
+		
+		this.context.putImageData(this.image, event.x, event.y);
+	};
+	SelectManager.prototype.set = function () {
+		this.context.shadowBlur = 5;
+		this.context.shadowColor = "blue";
+		this.context.shadowOffsetX = 1;
+		this.context.shadowOffsetY = 1;
+	};
+	
+	function AreaManager (stage) {
+		this.initialize(stage);
+	}
+	AreaManager.prototype = new StageManager();
+	AreaManager.prototype.initialize = function (stage) {
+		StageManager.prototype.initialize.call(this,stage);
+		
+		stage.on("dragstart", this.onDragStart.bind(this));
+		stage.on("drag", this.onDrag.bind(this));
+		stage.on("dragend", this.onDragEnd.bind(this));
+	};
+	AreaManager.prototype.set = function () {
+		this.context.strokeStyle = "rgb(105, 105, 105)";
+		this.context.lineWidth = 1;
+		this.context.fillStyle = "rgba(105, 105, 105, 0.2)";
+	};
+	AreaManager.prototype.onDragStart = function (data) {
+		if (data.block) {
+			return;
+		}
+		
+		stage.cursor("crosshair");
+	};
+	AreaManager.prototype.onDrag = function (data) {
+		if (data.block) {
+			return;
+		}
+		
+		var rect = data.rect;
+		
+		this.clear();
 
+		this.context.beginPath();
+		this.context.rect(rect.x, rect.y, rect.w, rect.h);
+		this.context.closePath();
+		
+		this.context.stroke();
+		this.context.fill();
+	};
+	AreaManager.prototype.onDragEnd = function (data) {
+		if (data.block) {
+			return;
+		}
+		
+		this.clear();
+		
+		stage.cursor("default");
+	};
+	window.Stage = Stage;
+	window.DefaultManager = DefaultManager;
+	window.AreaManager = AreaManager;
+	window.SelectManager = SelectManager;
 }) (window);
