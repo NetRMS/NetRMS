@@ -28,17 +28,24 @@ body {
 	<button id="zoomin">+</button>
 	<label><input type="checkbox" id="move">move</label>
 	<label><input type="checkbox" id="full">full</label>
+	<img id="img">
 </div>
-<script src="../JS/Import.js"></script>
-<script src="../JS/Stage2.js"></script>
+<script src="JS/Import.js"></script>
+<script src="JS/Stage.js"></script>
 <script>
+
 	var stage = new Stage("stage");
+	
+	new DefaultManager(stage)
+	stage.addLayer(new AreaManager(stage));
+	stage.addLayer(new SelectManager(stage));
+	
 	stage.on("enter", function(block) {
 	});
 	stage.on("leave", function(block) {
 	});
+	
 	var block;
-	var start = new Date().getTime();
 	for (var i=0; i< 10; i++) {
 		block = stage.addBlock(Math.round(Math.random() * stage.layer.mask.width), Math.round(Math.random() * stage.layer.mask.height));
 	}
@@ -57,6 +64,7 @@ body {
 	document.getElementById("zoomout").addEventListener("click", function () {
 		stage.zoomOut();
 	}, false);
+
 </script>
 
   </body>
