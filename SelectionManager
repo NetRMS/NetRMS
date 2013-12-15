@@ -1,0 +1,67 @@
+(function (window, undefined) {
+
+	"use strict";
+
+	//var _ = extend("util");	
+	/*
+	 * SelectionManager
+	 */
+	
+	function SelectionManager (stage) {
+		this.initialize(stage);
+	}
+	SelectionManager.prototype = new StageManager();
+	
+	SelectionManager.prototype.initialize = function (stage) {
+		StageManager.prototype.initialize.call(this, stage);
+		
+		stage.on("cancel", this.reDraw.bind(this));
+		stage.on("select", this.reDraw.bind(this));
+		stage.on("dragstart", this.ready.bind(this));
+		stage.on("drag", this.drag.bind(this));
+		stage.on("dragend", this.reDraw.bind(this));
+	};
+	SelectionManager.prototype.reDraw = function (event) {
+		this.clear();
+		
+		if (event.type == "cancel") {
+			this.stage.selectedBlocks.clear();
+		}
+		else {
+			var context = this.context,
+			blocks = this.stage.selectedBlocks,
+			block;
+			
+			for (var i=0, _i=blocks.size(); i<_i; i++) {
+				block = blocks.get(i);
+				block.path(context);
+				context.stroke();
+			}
+		}
+	};
+	SelectionManager.prototype.ready = function (event) {
+		//if (event.mode != Stage.MODE_SELECT) {
+		//	return;
+		//}
+		
+		this.copy();
+	};
+	SelectionManager.prototype.drag = function (event) {
+		//if (event.mode != Stage.MODE_SELECT) {
+		//	return;
+		//}
+		
+		this.clear();
+		
+		this.load(event.x, event.y);
+	};
+	SelectionManager.prototype.set = function () {
+		this.context.shadowBlur = 5;
+		this.context.shadowColor = "blue";
+		this.context.shadowOffsetX = 1;
+		this.context.shadowOffsetY = 1;
+	};
+	
+	window.SelectionManager = SelectionManager;
+	
+}) (window);
