@@ -1,81 +1,96 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Dragging Polygons</title>
- <meta charset="UTF-8">
-    <style>
 
-canvas {
-	box-shadow: rgba(0, 0, 0, 0.2) 6px 6px 8px;
-}
+<head>
+<title>Infrastructure Topology Administrator</title>
+<meta charset="UTF-8">
 
-nav {
-	z-index: 1;
-	position: fixed;
-	top: 0;
-	right: 0;
-}
-
-input[type=number] {
-	width: 0;
+<style>
+body {
 	padding: 0;
 	margin: 0;
-	border: 0;
 }
 
+#navigation {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 1;
+}
+#stage {
+	position: relative;
+}
+canvas {
+	border: 1px solid red; 
+}
 	</style>
-	<script src="JS/Import.js"></script>
-	<script src="JS/Stage.js"></script>
 </head>
 
-<body>	
-	<nav>
-		<button id="move">이동</button>
-		<button id="line">선긋기</button>
-		<button id="adjust">맞추기</button>
-		<button id="expand">확장</button>
-		<input type="range"  min="10" max="200" value="100" step="10" value="100" id="zoom">
-	</nav>
+<body>
+<div id="stage"></div>
+<div id="navigation">
+	<button id="add">추가</button>
+	<button id="zoomout">-</button>
+	<button id="zoomin">+</button>
+	<label><input type="checkbox" id="full">Full Screen</label>
+	<label><input type="radio" name="mode" value="Stage.MODE_SELECT">선택</label>
+	<label><input type="radio" name="mode" value="Stage.MODE_LINK">연결</label>
+	<label><input type="radio" name="mode" value="Stage.MODE_MOVE">화면 이동</label>
+	<img id="img">
+</div>
+<script src="JS/Import.js"></script>
+<script src="JS/stage/Index.js"></script>
+<script src="JS/stage/Block.js"></script>
+<script src="JS/stage/BlockArray.js"></script>
+<script src="JS/stage/StageManager.js"></script>
+<script src="JS/stage/BlockManager.js"></script>
+<script src="JS/stage/AreaManager.js"></script>
+<script src="JS/stage/DefaultManager.js"></script>
+<script src="JS/stage/TraceManager.js"></script>
+<script src="JS/stage/SelectionManager.js"></script>
+<script src="JS/stage/Stage.js"></script>
 <script>
-
-var stage = new Stage(500);
-
-for(var i=0; i< 10; i++) {
-	stage.addNode(Math.random() * 500, Math.random() * 500 / Math.sqrt(2));
-}
-
-stage.invalidate();
-
-document.getElementById("zoom").onchange = function(event) {
-	stage.zoom(this.value/100);
-};
-
-document.getElementById("adjust").onclick = function(event) {
-	stage.adjust();
-};
-
-document.getElementById("expand").onclick = function(event) {
-	stage.expand();
-};
-
-document.getElementById("move").onclick = function(event) {
-	stage.mode = Stage.MODE_MOVE;
-};
-
-document.getElementById("line").onclick = function(event) {
-	stage.mode = Stage.MODE_LINE;
-};
-
-/*
-stage.on("enter", function(node) {console.log("enter"); console.log(node);
-});
-stage.on("leave", function(node) {console.log("leave");console.log(node);
-});
-stage.on("select", function(node) {console.log("select");console.log(node);
-});
-stage.on("cancel", function(node) {console.log("cancel");console.log(node);
-});
-*/
+(function (window, undefined) {
+	var blocks = [], stage, block;
+	
+	for (var i=0; i< 10; i++) {
+		block = new Block();
+		blocks.push(block);
+		block.rect.x = Math.round(Math.random() * Stage.RESOLUTION[0]);
+		block.rect.y = Math.round(Math.random() * Stage.RESOLUTION[1]);
+	}
+	
+	//stage = new Stage("stage", Stage.RESOLUTION[0], Stage.RESOLUTION[1], blocks);
+	//stage.invalidate();
+	
+	stage = new Stage("stage", Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
+	
+	document.getElementById("full").addEventListener("change", function (event){
+		stage.setFullScreen(this.checked);
+	}, false);
+	
+	[].forEach.call(document.getElementsByName("mode"), function (mode) {
+		mode.addEventListener("change", function (event) {
+			stage.mode = eval(this.value);
+		}, false);
+	});
+	
+	document.getElementById("add").addEventListener("click", function () {
+		var block = new Block();
+		block.rect.x = Math.round(Math.random() * Stage.RESOLUTION[0]);
+		block.rect.y = Math.round(Math.random() * Stage.RESOLUTION[1]);
+		
+		stage.addBlock(block);
+	}, false);
+	
+	document.getElementById("zoomin").addEventListener("click", function () {
+		stage.zoomIn();
+	}, false);
+	
+	document.getElementById("zoomout").addEventListener("click", function () {
+		stage.zoomOut();
+	}, false);
+}(window));
 </script>
 
   </body>
