@@ -49,9 +49,12 @@
 			});
 		},
 		getBoundRect: function () {
-			return new Rect(this.xIndex[0].rect.x - this.xIndex[0].rect.w/2, this.yIndex[0].rect.y - this.yIndex[0].rect.h/2,
-				this.xIndex[this.xIndex.length - 1].rect.x + this.xIndex[this.xIndex.length - 1].rect.w/2,
-				this.yIndex[this.yIndex.length - 1].rect.y + this.yIndex[this.yIndex.length - 1].rect.h/2);
+			return {
+				"x": this.xIndex[0].rect.x - this.xIndex[0].rect.w/2,
+				"y": this.yIndex[0].rect.y - this.yIndex[0].rect.h/2,
+				"w": this.xIndex[this.xIndex.length - 1].rect.x + this.xIndex[this.xIndex.length - 1].rect.w/2,
+				"h": this.yIndex[this.yIndex.length - 1].rect.y + this.yIndex[this.yIndex.length - 1].rect.h/2
+				};
 		},
 		getBlocksInRect: function (rect) {
 			var array = new BlockArray(),
