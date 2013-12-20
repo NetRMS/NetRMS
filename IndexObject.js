@@ -7,8 +7,8 @@
 	/*
 	 * Index
 	 */
-	function Index () {}
-	Index.prototype = {
+	function IndexObject () {}
+	IndexObject.prototype = {
 		map: {
 		},
 		index: 1,
@@ -23,6 +23,6 @@
 		}
 	};
 	
-	window.Index = Index;
+	window.IndexObject = IndexObject;
 	
 }) (window);
