@@ -2,545 +2,346 @@
 
 	"use strict";
 
-	var _ = {};
+	function Stage (id, width, height, blocks) {
+		this.initialize(id, width, height, blocks);
+	}
 	
-	extend(_, "util");
+	Stage.RESOLUTION = [594, 420]; // [1189, 841] [841, 594] [420, 297] [297, 210]	
+	Stage.ZOOM_MAX = 3;
+	Stage.DRAG_OFF = 0;
+	Stage.DRAG_STAGE = 1 << 0;
+	Stage.DRAG_NODE = 1 << 1;
+	Stage.DRAG_SELECT = 1 << 2;
+	Stage.DRAG_LINK = 1 << 3;
+	Stage.DRAG_DELETE = 1 << 4;
+	Stage.TYPE_BLOCK = 1 << 0;
+	Stage.TYPE_LINK = 1 << 0;
+	Stage.MOVE_STEP = 5;
+	Stage.MODE_MOVE = 0;
+	Stage.MODE_DRAW = ~0;
 	
-	var COLOR_MBLUE = "#191970"; // midnight blue
-	/*
-	 * Rect
-	 */
-	function Rect(x, y, w, h) {
-		this.x = x;
-		this.y = y;
-		this.w = w;
-		this.h = h;
-	}
-
-	/*
-	 * Pos
-	 */
-	function Pos(x, y) {
-		this.x = x || 0;
-		this.y = y || 0;
-	}
-
-	/*
-	 * Node
-	 */
-	function Node(rect) {
-		this.initialize(rect);
-	}
-	Node.COLOR_BORDER = "#c0c0c0"; // silver
-	Node.COLOR_BACKGROUND = "#000080"; // navy
-	Node.prototype = {
-		initialize: function (rect) {
-			this.context;
-			this._context;
-			this.rect = rect;
-			this.index;
-			this.background = "#000000";
-			this.image = null;
-			this.handler = {};
-			this.lines = {};
-		},
-		line: function(node) {
-			var num = this.lines[node],
-			offset = num%2 > 0? -1: 1;
-			
-			if(offset < 0) {
-				offset = (num + offset) * offset;
-			}
-			
-			this.context.beginPath();
-			this.context.moveTo(this.rect.x + this.rect.w/2 + offset, this.rect.y + this.rect.h/2 + offset);
-			this.context.lineTo(node.rect.x + node.rect.w/2 + offset, node.rect.y + node.rect.h/2 + offset);
-			this.context.closePath();
-			this.context.stroke();
-		},
-		move: function(pos) {
-			this.rect.x = pos.x;
-			this.rect.y = pos.y;
-		},
-		shift: function(pos) {
-			this.rect.x += pos.x;
-			this.rect.y += pos.y;
-		},
-		dispatchEvent: function (event) {
-			if(this.handler[event]) {
-				this.handler[event](this);
-			}
-		},
-		on: function (event, handler) {
-			this.handler[event] = handler;
-		}
-	};
-
-	/*
-	 * Index
-	 */
-	function Index() {
-		this.initialize();
-	}
-	Index.prototype = {
-		initialize: function () {
-			this.map = {};
-			this.index = 0;
-		},
-		add: function (node) {
-			var index = _.numToRGBString(++this.index);
-			
-			this.map[index] = node;
-			
-			return index;
-		},
-		get: function (rgb) {
-			return this.map[_.numToRGBString(_.arrayToRGBNumber(rgb))];
-		}
-	};
-
-	/*
-	 * StageObject
-	 */
-	function StageObject () {
-		this.initialize();
-	}
-	StageObject.STEP = 100;
+	Stage.STAGE_MOVE = 1 << 0;
+	Stage.AREA_SELECT = 1 << 1;
+	Stage.BLOCK_MOVE = 1 << 2;
+	Stage.LINK_DRAW = 1 << 3;
 	
-	StageObject.prototype = {
-		initialize: function () {
-			this.canvas = document.createElement("canvas");
-			this.context = this.canvas.getContext("2d");
-			this.copy = null;
-			this.nodes = [];
-			this.ratio = 1;
-			this.size;
+	Stage.prototype = {
+		initialize: function (id, width, height, blocks){
 			
-			this.context.lineJoin = "round";
+			/*
+			 * Member
+			 */
+			
+			this.parent = document.getElementById(id);
+			this.stage = document.createElement("div");
+			this.width = this.originWidth = width;
+			this.height = this.originHeight = height;
+			this.index = new IndexObject();
+			this.blocks = new BlockArray(blocks);
+			this.selectedBlocks = new BlockArray();
+			this.links = [];
+			this.curPos = {
+				"x": 0,
+				"y": 0
+			};
+			this.selectable = null;
+			this.modeValue = Stage.MODE_SELECT;
+			this.isDragging = false;
+			this.mouseDownPos = null;
+			this.zoomValue = 1;
+			this.documentOverflow = "";
+			this.eventHandler = {};
+			this.fullScreenMode = false;
+			this.traceManager = new TraceManager(this);
+			this.defaultManager = new DefaultManager(this);
+			this.backupElements = [];
+			this.mode = {
+				"block": Stage.DRAG_MOVE,
+				"link": Stage.DRAG_MOVE,
+				"stage": Stage.DRAG_MOVE
+			};
+			this.dragMode = "";
+			this.lastSelectable = null;
+			this.mode = Stage.BLOCK_MOVE | Stage.STAGE_MOVE;
+			
+			/*
+			 * 초기화
+			 */
+			
+			this.parent.appendChild(this.stage);
+			
+			this.addLayer(this.traceManager, false).blocks = this.blocks;
+			this.addLayer(new LinkManager(this), true);
+			this.addLayer(new BlockManager(this), true).blocks = this.blocks;
+			this.addLayer(new SelectionManager(this), true).blocks = this.selectedBlocks;
+			this.addLayer(new AreaManager(this), true);
+			
+			this.documentOverflow = document.documentElement.style.overflow;
+			
+			window.addEventListener("resize", this.onWindowResize.bind(this), false);
+			this.stage.addEventListener("wheel", this.onWheel.bind(this), false);
+			this.stage.addEventListener("mousemove", this.onMouseMove.bind(this), false);
+			this.stage.addEventListener("mousedown", this.onMouseDown.bind(this), false);
+			this.stage.addEventListener("mouseup", this.onMouseOut.bind(this), false);
+			this.stage.addEventListener("mouseout", this.onMouseOut.bind(this), false);
 		},
-		drawNode: function (node) {
-			
-		},
-		drawGuide: function (pos) {
-			this.context.beginPath();
-			this.context.moveTo(pos.x + 0.5, 0);
-			this.context.lineTo(pos.x + 0.5, this.canvas.height);
-			this.context.moveTo(0, pos.y + 0.5);
-			this.context.lineTo(this.canvas.width, pos.y + 0.5);
-			this.context.closePath();
-			
-			this.context.strokeStyle = Stage.COLOR_GUIDELINE;
-			this.context.lineWidth = 0.5;
-			this.context.stroke();
-		},
-		drawLine: function (from, to, multiple) {
-			multiple = true;
-			this.context.beginPath();
-			this.context.moveTo(from.x, from.y);
-			this.context.lineTo(to.x, to.y);
-			this.context.closePath();
-			
-			this.context.strokeStyle = COLOR_MBLUE;
-			if(multiple) {
-				this.context.lineWidth = 5;
-				this.context.stroke();
-				this.context.globalCompositeOperation="destination-out";
-				this.context.lineWidth = 3;
+		addLayer: function (layer, show) {
+			if (show) {
+				this.stage.appendChild(layer.canvas);
 			}
-			else {
-				this.context.lineWidth = 1;
-			}
+			layer.canvas.style.position = "absolute";
 			
-			this.context.stroke();
+			layer.reset(this.width, this.height, this.zoomValue);
+			
+			return layer;
+		},
+		addBlock: function (block) {
+			this.index.set(block);
+			
+			this.blocks.push(block);
+			
+			this.fire("block", {
+				"type": "block",
+				"block": block
+			});
+		},
+		addLink: function (link) {
+			this.index.set(link);
+			
+			this.links.push(link);
+			
+			this.fire("link", {
+				"type": "link",
+				"link": link
+			});
 		},
 		invalidate: function () {
-			this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-			for(var i=0, _i=this.nodes.length, nodes=this.nodes; i<_i; i++) {
-				this.drawNode(nodes[i]);
-			}
-			
-			this.copy = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+			this.fire("invalidate",{
+				"type": "invalidate"
+			});
 		},
-		zoom: function (ratio) {
-			this.ratio = ratio;
+		getPos: function (event) {
+			var rect = this.stage.getBoundingClientRect();
 			
-			this.reset();
-		},
-		resize: function (size) {
-			this.size = size;
-		
-			this.reset();
+			return {
+				"x": event.clientX - rect.left,
+				"y": event.clientY - rect.top
+			};
 		},
 		reset: function () {
-			this.canvas.width = this.size * this.ratio;
-			this.canvas.height = this.size/Math.sqrt(2) * this.ratio;
-			
-			this.context.scale(this.ratio, this.ratio);
-			
-			this.invalidate();
+			this.fire("reset", {
+				"type": "reset",
+				"width": this.width,
+				"height": this.height,
+				"zoom": this.zoomValue
+			});
 		},
-		expand: function () {
-			this.shift(StageObject.STEP/2, StageObject.STEP/2/Math.sqrt(2));
-			this.resize(this.size + StageObject.STEP);
-		},
-		shift: function (x, y) {
+		fullScreen: function (on) {
+			var mode = this.fullScreenMode;
 			
-			this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+			this.fullScreenMode = on;
 			
-			for(var i=0, _i=this.nodes.length, nodes=this.nodes; i<_i; i++) {
-				nodes[i].rect.x += x;
-				nodes[i].rect.y += y;
-			}
-		},
-		adjust: function () {
-			var min = new Pos(this.canvas.width, this.canvas.height),
-			max = new Pos(0, 0);
-			
-			for(var i=0, _i=this.nodes.length, nodes=this.nodes; i<_i; i++) {
-				min.x = Math.min(min.x, nodes[i].rect.x);
-				min.y = Math.min(min.y, nodes[i].rect.y);
-				max.x = Math.max(max.x, nodes[i].rect.x + nodes[i].rect.w);
-				max.y = Math.max(max.y, nodes[i].rect.y + nodes[i].rect.h);
-			}
-			
-			this.shift(-min.x, -min.y);
-			this.resize(Math.max(max.x - min.x, (max.y - min.y)*Math.sqrt(2)));
-		},
-		clear: function () {
-			this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-		},
-		set: function (stage) {
-			this.canvas.width = stage.canvas.width; // canvas 의 크기가 변경되면 image가 초기화 된다
-			this.canvas.height = stage.canvas.height;
-			this.ratio = stage.ratio;
-			
-			this.context.scale(this.ratio, this.ratio);
-		}
-	};
-	
-	/*
-	 * Stage
-	 */
-	function Stage(size) {
-		this.initialize(size);
-	}
-	
-	Stage.SIZE = 400;
-	Stage.MODE_MOVE = 1;
-	Stage.MODE_LINE = 1 << 1;
-	Stage.COLOR_SELECTED = "#FF4500"; // orange red
-	Stage.COLOR_SELECTABLE = "#C0C0C0"; // silver
-	Stage.COLOR_GUIDELINE = "#C0C0C0"; // silver
-	Stage.COLOR_BOUND = "#C0C0C0"; // silver
-	
-	Stage.prototype = new StageObject();
-	
-	/*
-	 * Override
-	 */
-	Stage.prototype.initialize = function (size) {			
-		StageObject.prototype.initialize.call(this);
-		
-		var _this = this;
-		
-		this.stage = document.createElement("div");
-		this.shadow = new ShadowStage(size);
-		this.mask = new StageObject();
-		
-		this.nodes = [];
-		this.mouse = new Pos();
-		this.selectable = null;
-		this.selected = null;
-		this.offset = new Pos();
-		this.handler = {};
-		this.ratio = 1;
-		this.mode = Stage.MODE_MOVE;
-		
-		this.stage.style.position = "absolute";
-		this.canvas.style.position = "absolute";;
-		this.canvas.style.zIndex = 0;
-		this.mask.canvas.style.position = "absolute";
-		this.mask.canvas.style.zIndex = 1;
-		
-		this.resize(size);
-		this.mask.set(this);
-		this.shadow.set(this);
-		
-		document.documentElement.appendChild(this.stage);
-		
-		this.stage.appendChild(this.canvas);
-		this.stage.appendChild(this.mask.canvas);
-		
-		document.documentElement.appendChild(this.shadow.canvas);
-		
-		window.addEventListener("resize", function (event) {
-			_this.align();
-		}, false);			
-		
-		this.mask.canvas.onmousemove = function(event) {
-			_this.onMouseMove.call(_this, event);
-		};
-		
-		this.mask.canvas.onmousedown = function (event) {
-			_this.onMouseDown.call(_this, event);
-		};
-		
-		this.mask.canvas.onmouseup = this.mask.canvas.onmouseout = function (event) {
-			_this.onMouseOut.call(_this, event);
-		};
-	};
-	Stage.prototype.drawNode = function (node) {
-		this.context.beginPath();
-		this.context.rect(node.rect.x, node.rect.y , node.rect.w, node.rect.h);
-		this.context.closePath();
-		
-		this.context.lineWidth = 1;
-		this.context.strokeStyle = Node.COLOR_BORDER;
-		this.context.stroke();
-		
-		if(node.image) {
-			this.context.drawImage(node.image, node.rect.x, node.rect.y, node.rect.w);
-		}
-		else {
-			this.context.fillStyle = Node.COLOR_BACKGROUND;
-			this.context.fill();
-		}
-	};
-	Stage.prototype.invalidate = function () {
-		StageObject.prototype.invalidate.call(this);
-		
-		this.shadow.invalidate();
-	};
-	Stage.prototype.drawBound = function (node) {
-		this.context.beginPath();
-		this.context.rect(node.rect.x, node.rect.y , node.rect.w, node.rect.h);
-		this.context.closePath();
-		
-		this.context.lineWidth = 3;
-		this.context.strokeStyle = Node.COLOR_BORDER;
-		this.context.stroke();
-	};
-	Stage.prototype.onMouseMove= function (event) {
-		event.preventDefault();
-		
-		if(!this.isMouseMoved(event)) {
-			return;
-		}
-		
-		this.mouseTest();
-		
-		if(this.selected) {
-			var node = this.selected;
-			
-			if(this.mode == Stage.MODE_MOVE) {
-				var pos = new Pos(this.mouse.x/this.ratio - this.offset.x, this.mouse.y/this.ratio - this.offset.y);
+			if (mode && !on) { // normal
+				document.documentElement.style.overflow = this.documentOverflow;
 				
-				node.rect.x = pos.x;
-				node.rect.y = pos.y;
+				this.width = this.originWidth;
+				this.height = this.originHeight;
 				
-				this.mask.drawGuide(pos);
-				this.drawNode.call(this.mask, node);
+				this.stage.style.position = "static";
+				
+				this.reset();
 			}
-			else if(this.mode == Stage.MODE_LINE) {
-				this.mask.drawLine(new Pos(this.selected.rect.x + this.selected.rect.w/2, this.selected.rect.y + this.selected.rect.h/2), new Pos(this.mouse.x/this.ratio, this.mouse.y/this.ratio));
+			else if (!mode && on) { // full screen
+				document.documentElement.style.overflow = "hidden";
+				
+				this.stage.style.position = "fixed";
+				this.stage.style.top = "0px";
+				this.stage.style.left = "0px";
+				
+				this.onWindowResize.call(this);
 			}
-		}
-	};
-	Stage.prototype.onMouseDown = function (event) {
-		event.preventDefault();
-		
-		if(event.button != 0) { // left button (== 0) only
-			return;
-		}
-		
-		if(!this.selectable) { // 빈 공간 event
-			return
-		}
-		
-		var node = this.selected = this.selectable;
-		
-		this.offset = new Pos(this.mouse.x/this.ratio - this.selected.rect.x, this.mouse.y/this.ratio - this.selected.rect.y);
-		
-		this.nodes.splice(this.nodes.indexOf(node), 1); // 최상위로 다시 그려주기 위해 임시 제거
-		this.drawNode.call(this.mask, node); // 제거한 node mask 에 그려주기
-		this.invalidate(); // 새로 그리기
-		
-		this.mask.set(this); // mask 초기화
-		
-		if(this.mode == Stage.MODE_MOVE) {
-			this.shadow.clear(); // event 막기 위해 shadow clear
-		}
-		else if(this.mode == Stage.MODE_LINE) {
-			this.shadow.nodes = this.nodes; // event 막기 위해 shadow에서 노드 제거
-			this.shadow.invalidate();
-		}
-		
-		this.dispatchEvent("select", node);
-	};
-	Stage.prototype.onMouseOut = function (event) {
-		event.preventDefault();
-		
-		if(!this.selected) { // 빈 공간 event
-			return;
-		}
-		
-		var node = this.selected;
-		
-		this.selected = null;
-		
-		this.nodes.push(node);
-		this.drawNode(node); // 최상위로 다시 그려줌
-		
-		if(this.mode == Stage.MODE_MOVE) {			
-			this.shadow.nodes = this.nodes;
-			this.shadow.invalidate(); // shadow 새로 그리기
-		}
-		else if(this.mode == Stage.MODE_LINE) {
-			this.shadow.drawNode(node); // shadow에 다시 그려줌
+		},
+		zoom: function (zoomIn) {
+			if (zoomIn) {
+				if (this.zoomValue < Stage.ZOOM_MAX) {
+					this.zoomValue += 0.1;
+				}
+			}
+			else {
+				if (this.zoomValue > 0) {
+					this.zoomValue -= 0.1;
+				}
+			}
 			
-			if(node != this.selectable) { // 자기 자신을 선택한 경우 제외
-				this.onLine(node, this.selectable);
-			}
-		}
-		
-		this.mouseTest();
-		
-		this.dispatchEvent("cancel", node);
-	};
-	
-	Stage.prototype.onEnter = function () {
-		var node = this.selectable;
-		
-		if(this.mode == Stage.MODE_MOVE) {
-			this.canvas.style.cursor = "move";
-		}
-		else if(this.mode == Stage.MODE_LINE) {
-			this.canvas.style.cursor = "crosshair";
-		}
-		else {
-			this.canvas.style.cursor = "pointer";
-		}
-		
-		this.dispatchEvent("enter", node);
-	};
-	Stage.prototype.onLeave = function () {			
-		var node = this.selectable;
-		
-		this.canvas.style.cursor = "default";
-		
-		this.dispatchEvent("leave", node);
-	};
-	Stage.prototype.onLine = function (from, to) {
-		if(from[to]) {
-			from[to] = ++to[from];
-		}
-		else {
-			from[to] = to[from] = 1;
-		}
-		
-		this.context.strokeStyle = "red";
-		this.lineWidth = 10;
-		
-		from.line(to);
-	};
-	Stage.prototype.isMouseMoved = function (event) {
-		var pos = this.getPos(event);
-		
-		if(pos.x == this.mouse.x && pos.y == this.mouse.y) {
-			return false;
-		}
-		
-		this.mouse = pos;
-		
-		return true;
-	};
-	Stage.prototype.mouseTest = function () {
-		this.mask.clear();
-		
-		var node = this.shadow.getNode(this.mouse.x, this.mouse.y);
-		if(node) {
-			this.drawBound.call(this.mask, node);
+			this.reset();
+		},
+		fire: function (type, event) {
+			var handler = this.eventHandler[event.type = type];
 			
-			if(node != this.selectable) {
-				if(this.selectable) {
-					this.onLeave();
+			if (handler) {
+				for (var i=0, _i=handler.length; i<_i; i++) {
+					handler[i](event);
+				}
+			}
+			
+			if (event.cancel) {
+				return;
+			}
+			
+			if (event.type == "mousedown") {
+				if (this.selectable) {
+					event.block = this.selectable;
+					
+					this.fire("select", event);
+				}
+			}
+			else if (event.type == "mousemove") {				
+				if (this.mouseDownPos) {
+					event.pos = this.curPos;
+					event.block = this.selectable;
+					
+					this.fire("drag", event);
 				}
 				
-				this.selectable = node;
-				
-				this.onEnter();
+				if (this.lastSelectable != this.selectable) {
+					if (this.lastSelectable) {
+						this.fire("leave", event);
+					}
+					if (this.selectable) {
+						this.fire("enter", event);
+					}
+					this.lastSelectable = this.selectable;
+				}
 			}
+			else if (event.type == "mouseout") {
+				if (this.dragMode) {
+					event.pos = this.curPos;
+					event.block = this.selectable;
+					
+					this.fire("dragend", event);
+					
+					this.dragMode = "";
+				}
+			}
+			else if (event.type == "drag") {
+				if (!this.dragMode) {
+					if (this.selectable) {
+						this.dragMode = this.mode & Stage.BLOCK_MOVE? "blockmove": "linkdraw";
+					}
+					else {
+						this.dragMode = this.mode & Stage.STAGE_MOVE? "stagemove": "areaselect";
+					}
+					
+					this.fire("dragstart", event);
+				}
+				
+				this.fire(this.dragMode, event);
+			}
+			else if (event.type == "dragstart") {
+				//this.stage.style.cursor = this.dragMode == "blockmove" || this.dragMode =="stagemove"? "move": "crosshair";
+				
+				this.fire(this.dragMode +"start", event);
+			}
+			else if (event.type == "dragend") {
+				//this.stage.style.cursor = "default";
+				
+				this.fire(this.dragMode +"end", event);
+			}
+			else if (event.type == "leave") {
+				this.stage.style.cursor = this.mode & Stage.STAGE_MOVE? "move": "crosshair";
+			}
+			else if (event.type == "enter") {
+				this.stage.style.cursor = this.mode & Stage.BLOCK_MOVE? "move": "crosshair";
+			}
+		},
+		on: function (type, handler, first) {
+			var tmp = this.eventHandler[type] || [];
+			
+			if (first) {
+				tmp.unshift(handler);
+			}
+			else {
+				tmp.push(handler);
+			}
+			
+			this.eventHandler[type] = tmp;
+		},
+		
+		/*
+		 * Event Handler
+		 */
+		
+		onWindowResize: function (event) {
+			if (this.fullScreenMode) {
+				this.width = document.documentElement.clientWidth;
+				this.height = document.documentElement.clientHeight;
+				
+				this.reset();
+			}
+		},
+		onWheel: function (event) {
+			if (this.selectable) {
+				if (this.mode & Stage.BLOCK_MOVE) {
+					this.mode = this.mode ^ Stage.BLOCK_MOVE | Stage.LINK_DRAW;
+					this.stage.style.cursor = "crosshair";
+				}
+				else {
+					this.mode = this.mode ^ Stage.LINK_DRAW | Stage.BLOCK_MOVE;
+					this.stage.style.cursor = "move";
+				}
+			}
+			else {
+				if (this.mode & Stage.STAGE_MOVE) {
+					this.mode = this.mode ^ Stage.STAGE_MOVE | Stage.AREA_SELECT;
+					this.stage.style.cursor = "crosshair";
+				}
+				else {
+					this.mode = this.mode ^ Stage.AREA_SELECT | Stage.STAGE_MOVE;
+					this.stage.style.cursor = "move";
+				}
+			}
+		},
+		onMouseMove: function (event) {
+			var pos = this.curPos;
+			
+			this.curPos = this.getPos(event);
+			
+			if(pos.x == this.curPos.x && pos.y == this.curPos.y) { // if not moved
+				return;
+			}
+			
+			this.selectable = this.index.get(this.traceManager.getTrace(this.curPos));
+			
+			this.fire("mousemove", {
+				"siftKey": event.siftKey,
+				"ctrlKey": event.ctrlKey,
+				"zoom": this.zoomValue
+			});
+		},
+		onMouseDown: function (event) {
+			if(event.button != 0) { // left button (== 0) only
+				return;
+			}
+			
+			this.mouseDownPos = this.getPos(event);
+			
+			this.fire("mousedown", {
+				"siftKey": event.siftKey,
+				"ctrlKey": event.ctrlKey,
+				"zoom": this.zoomValue
+			});
+		},
+		onMouseOut: function (event) {
+			this.fire("mouseout", {
+				"siftKey": event.siftKey,
+				"ctrlKey": event.ctrlKey,
+				"zoom": this.zoomValue,
+			});
+			
+			this.mouseDownPos = null;
 		}
-		else if(this.selectable){
-			this.onLeave();
-			this.selectable = null;
-		}
-	};
-	Stage.prototype.addNode = function (x, y) {
-		var node = new Node(new Rect(x, y, 30, 30));
-		
-		node.index = this.shadow.index.add(node);
-		
-		this.nodes.push(node);
-		this.shadow.nodes.push(node);
-		
-		return node;
-	};
-	Stage.prototype.getPos = function (event) {
-		var rect = this.canvas.getBoundingClientRect();
-		
-		return new Pos(event.clientX - rect.left - this.canvas.clientLeft, event.clientY - rect.top - this.canvas.clientTop);
-	};
-	Stage.prototype.align = function () {
-		this.stage.style.left = ((document.documentElement.clientWidth - this.canvas.width) / 2) +"px";
-		this.stage.style.top = ((document.documentElement.clientHeight - this.canvas.height) / 2) +"px";
-	},
-	Stage.prototype.on = function (event, handler) {
-		this.handler[event] = handler;
-	};
-	Stage.prototype.dispatchEvent = function (event, node) {
-		if(this.handler[event]) {
-			this.handler[event](node);
-		}
-	};
-	
-	/*
-	 * ShadowStage
-	 */
-	function ShadowStage(size) {
-		this.initialize(size);
-	}
-	ShadowStage.prototype = new StageObject();
-	ShadowStage.prototype.initialize = function (size) {
-		StageObject.prototype.initialize.call(this, size);
-		
-		this.index = new Index();
-	};
-	ShadowStage.prototype.drawNode =function (node) {
-		this.context.beginPath();
-		this.context.rect(node.rect.x, node.rect.y , node.rect.w, node.rect.h);
-		this.context.closePath();
-		
-		this.context.fillStyle = node.index;
-		this.context.fill();
-	};
-	ShadowStage.prototype.getNode = function (x, y) {		
-		return this.index.get(this.context.getImageData(x, y, 1, 1).data);
-	};
-	
-	
-	/*
-	 * LineStage
-	 */
-	function LineStage(size) {
-		this.initialize(size);
-	}
-	LineStage.prototype = new StageObject();
-	LineStage.prototype.x = function () {
-		
 	};
 	
 	window.Stage = Stage;
-
+	
 }) (window);
