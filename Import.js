@@ -1,6 +1,11 @@
 (function( window, undefined ) {
-
-	var libPool = {
+	
+	function elements(id) {
+		return elements.array[id] || (elements.array[id] = document.getElementById(id));
+	}
+	elements.array = {};
+	
+	var library = {
 		"class" : {
 			hasClass: function(e, s) {
 				return new RegExp("(?:^|\\s+)" + s + "(?:\\s+|$)").test(e.className);
@@ -19,6 +24,25 @@
 		"net" : {
 			isValidIPAddress: function(ip) {
 				return ip.match(/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/)? true: false;
+			}
+		},
+		"coord": {
+			getDistance: function (from, to) {
+				return {
+					"x": to.x - from.x,
+					"y": to.y - from.y
+				};
+			},
+			getRect: function (from, to) {
+				return {
+					"x": Math.min(from.x, to.x),
+					"y": Math.min(from.y, to.y),
+					"w": Math.abs(from.x - to.x),
+					"h": Math.abs(from.y - to.y)
+				};
+			},
+			isPointInRect: function (p, rect) {
+				return rect.x < p.x && rect.y < p.y && rect.x + rect.w > p.x && rect.y + rect.h > p.y;
 			},
 		},
 		"util" : {
@@ -32,29 +56,6 @@
 			},
 			arrayToRGBString: function (array) {
 				return "#"+ (1 << 24 | array[0]<<16 | array[1]<<8 | array[2]).toString(16).substring(1);
-			},
-			isPointInRect: function (p, p1, p2) {
-				var lowX , lowY, highX, highY;
-				
-				if(p1.x < p2.x) {
-					lowX = p1.x;
-					highX = p2.x;
-				}
-				else {
-					lowX = p2.x;
-					highX = p1.x;
-				}
-				
-				if(p1.y < p2.y) {
-					lowY = p1.y;
-					highY = p2.y;
-				}
-				else {
-					lowY = p2.y;
-					highY = p1.y;
-				}
-				
-				return lowX < p.x && lowY < p.y && highX > p.x && highY > p.y;
 			},
 			search: function (array, value, func) {
 				function _search(low, high) {
@@ -83,16 +84,12 @@
 		}
 	};
 
-	function extend(o, libName) {
-		var lib = libPool[libName];
-		if(lib) {
-			for(var func in lib) {
-				o[func] = lib[func];
-			}
-		}
+	function extend(libName) {
+		return library[libName];
 	}
 
 	window.extend = extend;
+	window.elements = elements;
 
 })( window );
  	
