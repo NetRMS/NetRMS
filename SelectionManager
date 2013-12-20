@@ -2,7 +2,7 @@
 
 	"use strict";
 
-	//var _ = extend("util");	
+	var _ = extend("coord");	
 	/*
 	 * SelectionManager
 	 */
@@ -13,54 +13,67 @@
 	SelectionManager.prototype = new StageManager();
 	
 	SelectionManager.prototype.initialize = function (stage) {
-		StageManager.prototype.initialize.call(this, stage);
+		StageManager.prototype.initialize.call(this);
 		
-		stage.on("cancel", this.reDraw.bind(this));
-		stage.on("select", this.reDraw.bind(this));
-		stage.on("dragstart", this.ready.bind(this));
-		stage.on("drag", this.drag.bind(this));
-		stage.on("dragend", this.reDraw.bind(this));
+		stage.on("areaselectstart", this.onStart.bind(this));
+		stage.on("areaselectend", this.onEnd.bind(this), true);
+		stage.on("stagemovestart", this.onStart.bind(this));
+		stage.on("stagemove", this.onStageMove.bind(this));
+		stage.on("stagemoveend", this.onEnd.bind(this), true);
+		stage.on("reset", this.onReset.bind(this));
+	/*	
+		stage.on("select", this.onSelect.bind(this));
+		stage.on("dragstart", this.onDrag.bind(this));
+		stage.on("drag", this.onDrag.bind(this));
+		stage.on("dragend", this.onDragEnd.bind(this));
+		
+		*/
 	};
-	SelectionManager.prototype.reDraw = function (event) {
+	
+	/*
+	 * Event Handler
+	 */
+	
+	SelectionManager.prototype.onStageMove = function (event) {
 		this.clear();
 		
-		if (event.type == "cancel") {
-			this.stage.selectedBlocks.clear();
-		}
-		else {
-			var context = this.context,
-			blocks = this.stage.selectedBlocks,
-			block;
-			
-			for (var i=0, _i=blocks.size(); i<_i; i++) {
-				block = blocks.get(i);
-				block.path(context);
-				context.stroke();
-			}
-		}
-	};
-	SelectionManager.prototype.ready = function (event) {
-		//if (event.mode != Stage.MODE_SELECT) {
-		//	return;
-		//}
+		var distance = _.getDistance(this.pos, event.pos);
 		
+		this.load(distance.x, distance.y);
+	};
+	SelectionManager.prototype.onStart = function (event) {
+		this.pos = event.pos;
 		this.copy();
 	};
-	SelectionManager.prototype.drag = function (event) {
-		//if (event.mode != Stage.MODE_SELECT) {
-		//	return;
-		//}
-		
-		this.clear();
-		
-		this.load(event.x, event.y);
+	SelectionManager.prototype.onEnd = function (event) {
+		this.invalidate();
 	};
+	SelectionManager.prototype.onSelect = function (event) {
+		this.invalidate();
+	};
+	SelectionManager.prototype.onReset = function (event) {
+		this.reset(event.width, event.height, event.zoom);
+	};
+	
+	/*
+	 * Override
+	 */
+	
+	SelectionManager.prototype.drawItem = function (item) {
+		item.path(this.context);
+		
+		this.context.stroke();
+	},
 	SelectionManager.prototype.set = function () {
 		this.context.shadowBlur = 5;
 		this.context.shadowColor = "blue";
 		this.context.shadowOffsetX = 1;
 		this.context.shadowOffsetY = 1;
 	};
+	
+	/*
+	 * Method
+	 */
 	
 	window.SelectionManager = SelectionManager;
 	
