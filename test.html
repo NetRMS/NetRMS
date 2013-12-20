@@ -6,89 +6,122 @@
 <meta charset="UTF-8">
 
 <style>
-body {
-	padding: 0;
-	margin: 0;
+* {
+	font: 10pt 맑은 고딕, arial;
 }
-
 #navigation {
 	position: absolute;
-	top: 10px;
-	right: 10px;
+	top: 3px;
+	right: 3px;
 	z-index: 1;
 }
-#stage {
+
+#stage.normal {
+	border: 0;
+	padding: 0;
+	width: 500px;
+	height: 500px;
+	float: left;
+	margin: 50px;
+	border: 1px solid pink;
+	box-shadow: 5px 5px pink ;
 	position: relative;
 }
-canvas {
-	border: 1px solid red; 
+
+#stage {
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
 }
-	</style>
+
+#stage.normal *.fullscreen {
+	display: none;
+}
+
+</style>
 </head>
 
 <body>
-<div id="stage"></div>
-<div id="navigation">
-	<button id="add">추가</button>
-	<button id="zoomout">-</button>
-	<button id="zoomin">+</button>
-	<label><input type="checkbox" id="full">Full Screen</label>
-	<label><input type="radio" name="mode" value="Stage.MODE_SELECT">선택</label>
-	<label><input type="radio" name="mode" value="Stage.MODE_LINK">연결</label>
-	<label><input type="radio" name="mode" value="Stage.MODE_MOVE">화면 이동</label>
-	<img id="img">
-</div>
+	
+	<div id="stage" class="normal">
+		<nav id="navigation">
+			<button id="add" class="fullscreen">추가</button>
+			<button id="zoomout">-</button>
+			<button id="zoomin">+</button>
+			<button id="fullscreen">전체화면</button>
+			<button id="origin" class="fullscreen">화면복귀</button>
+			<label class="fullscreen"><input type="radio" name="mode" value="Stage.MODE_SELECT">선택</label>
+			<label class="fullscreen"><input type="radio" name="mode" value="Stage.MODE_LINK">연결</label>
+			<label class="fullscreen"><input type="radio" name="mode" value="Stage.MODE_MOVE" checked>화면 이동</label>
+		</nav>
+	</div>
+	<p></p>
+	
 <script src="JS/Import.js"></script>
-<script src="JS/stage/Index.js"></script>
-<script src="JS/stage/Block.js"></script>
+<script src="JS/stage/IndexObject.js"></script>
+<script src="JS/stage/BlockObject.js"></script>
+<script src="JS/stage/NodeObject.js"></script>
+<script src="JS/stage/LinkObject.js"></script>
 <script src="JS/stage/BlockArray.js"></script>
 <script src="JS/stage/StageManager.js"></script>
 <script src="JS/stage/BlockManager.js"></script>
 <script src="JS/stage/AreaManager.js"></script>
+<script src="JS/stage/LinkManager.js"></script>
 <script src="JS/stage/DefaultManager.js"></script>
 <script src="JS/stage/TraceManager.js"></script>
 <script src="JS/stage/SelectionManager.js"></script>
 <script src="JS/stage/Stage.js"></script>
 <script>
 (function (window, undefined) {
-	var blocks = [], stage, block;
+	var stage = new Stage("stage", 500, 500);
 	
-	for (var i=0; i< 10; i++) {
-		block = new Block();
-		blocks.push(block);
-		block.rect.x = Math.round(Math.random() * Stage.RESOLUTION[0]);
-		block.rect.y = Math.round(Math.random() * Stage.RESOLUTION[1]);
-	}
+	//stage.mode(Stage.MODE_MOVE);
 	
-	//stage = new Stage("stage", Stage.RESOLUTION[0], Stage.RESOLUTION[1], blocks);
-	//stage.invalidate();
-	
-	stage = new Stage("stage", Stage.RESOLUTION[0], Stage.RESOLUTION[1]);
-	
-	document.getElementById("full").addEventListener("change", function (event){
-		stage.setFullScreen(this.checked);
-	}, false);
-	
-	[].forEach.call(document.getElementsByName("mode"), function (mode) {
-		mode.addEventListener("change", function (event) {
-			stage.mode = eval(this.value);
-		}, false);
-	});
-	
-	document.getElementById("add").addEventListener("click", function () {
-		var block = new Block();
+	function addBlock() {
+		var block = new NodeObject();
 		block.rect.x = Math.round(Math.random() * Stage.RESOLUTION[0]);
 		block.rect.y = Math.round(Math.random() * Stage.RESOLUTION[1]);
 		
 		stage.addBlock(block);
+	}
+	
+	for (var i=0; i < 10; i++) {
+		addBlock();
+	}
+	
+	document.getElementById("fullscreen").addEventListener("click", function (event){
+		elements("stage").className = "fullscreen";
+		
+		stage.fullScreen(true);
+	}, false);
+	
+	document.getElementById("origin").addEventListener("click", function (event){
+		elements("stage").className = "normal";
+		
+		stage.fullScreen(false);
+	}, false);
+	
+	[].forEach.call(document.getElementsByName("mode"), function (mode) {
+		mode.addEventListener("change", function (event) {
+			stage.mode(eval(this.value));
+		}, false);
+	});
+	
+	document.getElementById("add").addEventListener("click", function () {
+		addBlock();
 	}, false);
 	
 	document.getElementById("zoomin").addEventListener("click", function () {
-		stage.zoomIn();
+		stage.zoom(true);
 	}, false);
 	
 	document.getElementById("zoomout").addEventListener("click", function () {
-		stage.zoomOut();
+		stage.zoom(false);
 	}, false);
 }(window));
 </script>
