@@ -6,65 +6,151 @@
 <meta charset="UTF-8">
 
 <style>
-body {
-	padding: 0;
-	margin: 0;
+* {
+	font: 10pt 맑은 고딕, arial;
 }
-
 #navigation {
 	position: absolute;
-	top: 10px;
-	right: 10px;
+	top: 3px;
+	right: 3px;
 	z-index: 1;
 }
 
-	</style>
+#stage.normal {
+	border: 0;
+	padding: 0;
+	width: 500px;
+	height: 500px;
+	float: left;
+	margin: 50px;
+	border: 1px solid pink;
+	box-shadow: 5px 5px pink ;
+	position: relative;
+}
+
+#stage {
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+#stage.normal *.fullscreen {
+	display: none;
+}
+
+</style>
 </head>
 
 <body>
-<div id="stage"></div>
-<div id="navigation">
-	<button id="zoomout">-</button>
-	<button id="zoomin">+</button>
-	<label><input type="checkbox" id="move">move</label>
-	<label><input type="checkbox" id="full">full</label>
-	<img id="img">
-</div>
-<script src="JS/Import.js"></script>
-<script src="JS/Stage.js"></script>
+	
+	<div id="stage" class="normal">
+		<nav id="navigation">
+			<button id="save">저장</button>
+			<button id="_save" class="fullscreen">저장</button>
+			<button id="add" class="fullscreen">추가</button>
+			<button id="zoomout">-</button>
+			<button id="zoom">0</button>
+			<button id="zoomin">+</button>
+			<button id="fullscreen">전체화면</button>
+			<button id="origin" class="fullscreen">화면복귀</button>
+			<label class="fullscreen"><input type="radio" name="mode" value="Stage.MODE_SELECT">선택</label>
+			<label class="fullscreen"><input type="radio" name="mode" value="Stage.MODE_LINK">연결</label>
+			<label class="fullscreen"><input type="radio" name="mode" value="Stage.MODE_MOVE" checked>화면 이동</label>
+		</nav>
+	</div>
+	<p></p>
+	
+<script src="JS/Include.js"></script>
+<script src="JS/com/imtechlab/HTTPPost.js"></script>
+<script src="JS/com/imtechlab/Util.js"></script>
+<script src="JS/com/imtechlab/ArrayObject.js"></script>
+<script src="JS/com/imtechlab/itam/block/BlockArray.js"></script>
+<script src="JS/com/imtechlab/itam/block/NodeArray.js"></script>
+<script src="JS/com/imtechlab/itam/block/BlockObject.js"></script>
+<script src="JS/com/imtechlab/itam/block/NodeBlock.js"></script>
+<script src="JS/com/imtechlab/itam/block/LinkBlock.js"></script>
+<script src="JS/com/imtechlab/itam/stage/StageObject.js"></script>
+<script src="JS/com/imtechlab/itam/stage/NodeStage.js"></script>
+<script src="JS/com/imtechlab/itam/stage/LinkStage.js"></script>
+<script src="JS/com/imtechlab/itam/stage/TraceStage.js"></script>
+<script src="JS/com/imtechlab/itam/stage/AreaStage.js"></script>
+<script src="JS/com/imtechlab/itam/stage/SelectionStage.js"></script>
+<script src="JS/com/imtechlab/itam/ITAM.js"></script>
+
 <script>
-
-	var stage = new Stage("stage");
+(function (window, undefined) {
+	var NodeBlock = com.imtechlab.itam.block.NodeBlock,
+	ITAM = com.imtechlab.itam.ITAM,
+	Elements = com.imtechlab.util.Elements;
 	
-	new DefaultManager(stage)
-	stage.addLayer(new AreaManager(stage));
-	stage.addLayer(new SelectManager(stage));
+	var itam = new ITAM("stage", 500, 500);
 	
-	stage.on("enter", function(block) {
+	itam.on("click", function (event) {
 	});
-	stage.on("leave", function(block) {
-	});
+	//stage.mode(Stage.MODE_MOVE);
 	
-	var block;
-	for (var i=0; i< 10; i++) {
-		block = stage.addBlock(Math.round(Math.random() * stage.layer.mask.width), Math.round(Math.random() * stage.layer.mask.height));
+	function addNode() {
+		var block = new NodeBlock();
+		block.rect.x = Math.round(Math.random() * 500);
+		block.rect.y = Math.round(Math.random() * 500);
+		
+		itam.addBlock(block);
 	}
-	stage.invalidate();
 	
-	document.getElementById("move").addEventListener("change", function (event){
-		stage.set(Stage.MODE_MOVE, this.checked);
+	for (var i=0; i < 10; i++) {
+		addNode();
+	}
+	
+	document.getElementById("save").addEventListener("click", function (event){
+		var nodes = itam.nodes, links = itam.links;
+		
+		var o = {
+			"nodes": nodes,
+			"links" : links
+		};
+		console.log(JSON.stringify(o));
 	}, false);
-	document.getElementById("full").addEventListener("change", function (event){
-		stage.set(Stage.MODE_FULL, this.checked);
-		stage.fullScreen();
+	
+	document.getElementById("fullscreen").addEventListener("click", function (event){
+		Elements("stage").className = "fullscreen";
+		
+		itam.fullScreen(true);
 	}, false);
+	
+	document.getElementById("origin").addEventListener("click", function (event){
+		Elements("stage").className = "normal";
+		
+		itam.fullScreen(false);
+	}, false);
+	
+	[].forEach.call(document.getElementsByName("mode"), function (mode) {
+		mode.addEventListener("change", function (event) {
+			itam.mode(eval(this.value));
+		}, false);
+	});
+	
+	document.getElementById("add").addEventListener("click", function () {
+		addNode();
+	}, false);
+	
 	document.getElementById("zoomin").addEventListener("click", function () {
-		stage.zoomIn();
+		itam.zoom(1);
 	}, false);
+	
 	document.getElementById("zoomout").addEventListener("click", function () {
-		stage.zoomOut();
+		itam.zoom(-1);
 	}, false);
-
+	
+	document.getElementById("zoom").addEventListener("click", function () {
+		itam.zoom(0);
+	}, false);
+	
+}(window));
 </script>
 
   </body>
