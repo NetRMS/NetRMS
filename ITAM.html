@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+ <html>
+
+<head>
+	<title>Infrastructure Topology Administrator</title>
+	<meta charset="UTF-8">
+	<link rel="shortcut icon" href="Img/favicon.ico">
+	<style>
+ 
+ * {
+  font: 10pt 맑은 고딕, arial;
+ }
+ #navigation {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 1;
+ }
+
+div.hidden {
+  display: none;
+ }
+ 
+	</style>
+</head>
+
+<body>
+	<div class="hidden">
+	 	<!-->img src="Img/L2.png" id="imageset.l2"-->
+	 	<!-->img src="Img/L3.png" id="imageset.l3"-->
+		<form action="JSP/Save.jsp" method="post">
+			<textarea name="config" id="config"></textarea>
+		</form>
+	</div>
+  
+ 	<nav id="navigation">
+ 		<input type="file" id="fileopen">
+		<button id="save">저장</button>
+		<button id="add">추가</button>
+		<button id="zoomout">-</button>
+		<button id="zoom">0</button>
+		<button id="zoomin">+</button>
+		<label><input type="radio" name="mode" value="Stage.MODE_SELECT">선택</label>
+		<label><input type="radio" name="mode" value="Stage.MODE_LINK">연결</label>
+		<label><input type="radio" name="mode" value="Stage.MODE_MOVE" checked>화면 이동</label>
+	</nav>
+  
+ <script src="JS/Include.js"></script>
+ <script src="JS/com/imtechlab/HTTPPost.js"></script>
+ <script src="JS/com/imtechlab/Util.js"></script>
+ <script src="JS/com/imtechlab/ArrayObject.js"></script>
+ <script src="JS/com/imtechlab/SetObject.js"></script>
+ <script src="JS/com/imtechlab/itam/block/BlockArray.js"></script>
+ <script src="JS/com/imtechlab/itam/block/NodeArray.js"></script>
+ <script src="JS/com/imtechlab/itam/stage/StageObject.js"></script>
+ <script src="JS/com/imtechlab/itam/stage/NodeStage.js"></script>
+ <script src="JS/com/imtechlab/itam/stage/LinkStage.js"></script>
+ <script src="JS/com/imtechlab/itam/stage/TraceStage.js"></script>
+ <script src="JS/com/imtechlab/itam/stage/AreaStage.js"></script>
+ <script src="JS/com/imtechlab/itam/stage/SelectionStage.js"></script>
+ <script src="JS/com/imtechlab/itam/ITAM.js"></script>
+
+<script>
+
+(function (window, undefined) {
+	var NodeBlock = com.imtechlab.itam.block.NodeBlock,
+	ITAM = com.imtechlab.itam.ITAM,
+	Elements = com.imtechlab.util.Elements;
+	
+	var itam = new ITAM({"l2": Elements("imageset.l2"), "l3": Elements("imageset.l3")});
+	
+	itam.on("click", function (event) {
+		console.log(event.block);
+	});
+	
+	function addNode() {
+		itam.createNode(Math.round(Math.random() * 500), Math.round(Math.random() * 500), 20, 20, 2);
+	}
+  /*
+  for (var i=0; i < 10; i++) {
+addNode();
+  }
+  */
+  document.getElementById("save").addEventListener("click", function (event){
+Elements("config").value = itam.save();
+document.querySelector("form[action='JSP/Save.jsp']").submit();
+  }, false);
+
+  [].forEach.call(document.getElementsByName("mode"), function (mode) {
+mode.addEventListener("change", function (event) {
+ itam.mode(eval(this.value));
+}, false);
+  });
+  
+  document.getElementById("add").addEventListener("click", function () {
+addNode();
+  }, false);
+  
+  document.getElementById("zoomin").addEventListener("click", function () {
+itam.zoom(1);
+  }, false);
+  
+  document.getElementById("zoomout").addEventListener("click", function () {
+itam.zoom(-1);
+  }, false);
+  
+  document.getElementById("zoom").addEventListener("click", function () {
+itam.zoom(0);
+  }, false);
+  
+  document.getElementById("fileopen").addEventListener("change", function () {
+var fr = new FileReader();
+
+fr.onload = function (event) {
+ itam.load(fr.result);
+};
+
+fr.readAsText(event.target.files[0]);
+  }, false);
+  
+ }(window));
+ </script>
+
+  </body>
+ </html>
