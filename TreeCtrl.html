@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>NRMS (Network Resource Management System)</title>
+		<link rel="shortcut icon" href="Img/favicon.ico">
+		<style type="text/css">
+		* {
+			font-family: arial, 맑은 고딕;
+		}
+		
+		.treectrl {
+			overflow: auto;
+		}
+		
+		.treectrl ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+		}
+		
+		.treectrl li {
+			position: relative;
+			padding-left: 20px;
+		}
+		
+		.treectrl li>input[type="checkbox"] {
+			display: none;
+		}
+		
+		.treectrl li>input[type="checkbox"] ~ul{
+			display: none;
+		}
+		
+		.treectrl li>label {
+			position: absolute;
+			top: 0;
+			left: 0;
+		}
+		
+		.treectrl li>input[type="checkbox"]:checked +label:before {
+			content: url(Img/minus.gif);
+		}
+		
+		.treectrl li>input[type="checkbox"] +label:before {
+			content: url(Img/plus.gif);
+		}
+		
+		.treectrl li>input[type="checkbox"]:checked ~ul {
+			display: block;
+		}
+		</style>
+		<script>
+		
+	</script>
+	</head>
+	<body>
+	
+		<div class="treectrl">
+			<ul>
+				<li>
+					<input id="Step1" type="checkbox">
+					<label for="Step1"></label>
+					<a>Network</a>
+					<ul>
+						<li>
+							<input id="Step3" type="checkbox">
+							<label for="Step3"></label>
+							<a>가</a>
+							<ul>
+								<li>
+									<a>ABC</a>
+								</li>
+							</ul>
+						</li>
+							
+						<li><a>나</a></li>
+						<li><a>다</a></li>
+					</ul>
+				</li>
+				<li>
+					<input id="Step2" type="checkbox">
+					<label for="Step2"></label>
+					<a>Server</a>
+					<ul>
+						<li><a>1</a></li>
+						<li><a>2</a></li>
+						<li><a>3</a></li>
+					</ul>
+				</li>
+				<li>
+					<a>ETC</a>
+				</li>
+			</ul>
+		</div>
+	</body>
+
+	<script>
+"use strict";
+
+function TreeCtrl() {
+	this.init(arguments);
+}
+
+TreeCtrl.prototype = {
+	init: function (args) {
+		var id = args && args[0];
+		
+		if (id) {
+			this.create(id);
+		}
+	},
+	
+	create: function (id) {
+		this.tree = document.getElementById(id);
+		this.root = document.createElement("ul");
+		
+		this.tree.appendChild(this.root);
+	},
+	
+	insertItem: function (text, parent) {
+		var item = document.createElement("li"),
+			anchor = document.createElement("a");
+	
+		item.appendChild(anchor).textContent = text;
+		
+		if (parent && parent != this.root) {
+			if (parent.lastChild.nodeName.toLowerCase() != "ul") {
+				parent.insertBefore(document.createElement("input") ,parent.firstChild);
+			}
+		}
+		else {
+			parent = this.root;
+		}
+		
+		parent.appendChild(item);
+		
+		
+		if (sibling = sibling? sibling.nextSibling: sub.firstChild) {
+			sub.insertBefore (item, sibling);
+		}
+		else {
+			sub.appendChild (item);
+		}
+		
+		return item;
+	},
+	deleteItem : function (item) {
+		if(item == this.selectedItem) {
+			this.selectedItem = null;
+		}
+		
+		item.parentNode.removeNode(item);
+	},
+	deleteAllItems : function () {
+		this.selectedItem = null;
+		
+		while(this.root.firstChild) {
+			this.root.removeChild(this.root.firstChild);
+		}
+	},
+	expand : function (item, expand) {
+		if(expand === undefined) expand = true;
+		
+		if(expand) {
+			_.removeClass(item, TreeCtrl.EXPANDABLE);
+			_.addClass(item, TreeCtrl.COLLAPSABLE);
+		}
+		else {
+			_.removeClass(item, TreeCtrl.COLLAPSABLE);
+			_.addClass(item, TreeCtrl.EXPANDABLE);
+		}
+	},
+	getNextItem : function (item, flag) {
+		switch(flag) {
+		case TreeCtrl.NEXT:
+			return item.nextSibling;
+		case TreeCtrl.PREVIOUS:
+			return item.previousSibling;
+		case TreeCtrl.PARENT:console.log(item);
+			if(item.parentNode == this.root) return null;
+			else return item.parentNode.parentNode;
+		case TreeCtrl.ROOT:
+			return this.root;
+			
+		default:
+				return null;
+		}
+	},
+	getItemText : function (item) {
+		return item.childNodes[1].textContent;
+	},
+	setItemText : function (item, text) {
+		return item.childNodes[1].textContent = text;
+	},
+	getChildItem : function (item) {
+		return item.firstChild;
+	},
+	setItemData : function (item, data) {
+		this.itemData[item] = data;
+	},
+	getItemData : function (item) {
+		return this.itemData[item];
+	}
+};
+
+	</script>
+</html>
+
